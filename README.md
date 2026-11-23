@@ -1,54 +1,38 @@
-# Kuntur Media Pro
+# Kuntur Media Pro — Completo
 
-Aplicación nativa Android de entretenimiento **completa al 100%**.
+Aplicación nativa Android de entretenimiento **completa**.
 
-## Características
+## Incluye
 
-- Pantalla principal profesional (Radio · TV · Películas)
-- Reproductor nativo Media3 / ExoPlayer
-- Soporte Widevine DRM para contenido premium
-- Planes de suscripción con pago vía Yape **955238172**
-- Monitoreo de transacciones (historial local)
-- Actualización automática desde GitHub Releases (sin Play Store)
-- Sin panel de administrador visible (aprobaciones privadas)
-- Tema oscuro Material 3 con acentos dorados
+- Pantalla de inicio (splash) con marca
+- Radio · Canales TV · Películas
+- Reproductor ExoPlayer + soporte Widevine DRM
+- Control de acceso a contenido Premium según plan aprobado
+- Planes con pago Yape **955238172**
+- Historial de transacciones
+- Actualización automática por GitHub Releases (sin Play Store)
+- Sin panel de administrador visible
 
 ## Generar APK
 
-1. Vaya a **Actions** → **Build and Release APK**
-2. Pulse **Run workflow**
-3. Descargue el artefacto o el Release generado
+1. **Actions** → **Build and Release APK**
+2. **Run workflow**
+3. Descargar artefacto o Release
 
 ## Planes
 
-| Plan     | Precio | Descripción                   |
-|----------|--------|-------------------------------|
-| Básico   | S/ 10  | Acceso a radios               |
-| Estándar | S/ 25  | Radios + Canales TV           |
-| Premium  | S/ 45  | Todo el contenido sin límites |
+| Plan | Precio | Acceso |
+|------|--------|--------|
+| Básico | S/ 10 | Radios |
+| Estándar | S/ 25 | Radios + TV |
+| Premium | S/ 45 | Todo |
 
-Pago único vía Yape: **955238172**
+Pago: Yape **955238172** → aprobación privada por el propietario.
 
-## Estructura del proyecto
+## Nota sobre contenido
 
-```
-app/src/main/java/com/kuntur/mediapro/
-├── MainActivity.kt
-├── data/MediaItem.kt
-├── billing/PurchaseManager.kt
-├── billing/TransactionManager.kt
-├── player/DrmHelper.kt
-├── update/UpdateManager.kt
-└── ui/theme/Theme.kt
-```
-
-## Tecnologías
-
-- Kotlin + Jetpack Compose
-- Media3 / ExoPlayer (+ DASH + DRM)
-- Material 3
-- GitHub Actions (CI/CD + Releases)
+Los streams actuales son de demostración. Reemplace las URLs en `MediaRepository` por fuentes propias o con derechos. Active `licenseUrl` cuando tenga un servidor Widevine real.
 
 ---
 
-**Kuntur Media Pro** — Entretenimiento nativo profesional.
+**Kuntur Media Pro**
