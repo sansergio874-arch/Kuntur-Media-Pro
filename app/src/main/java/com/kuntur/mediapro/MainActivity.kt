@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.OptIn
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +35,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -44,6 +49,7 @@ import com.kuntur.mediapro.billing.TransactionManager
 import com.kuntur.mediapro.data.MediaItem
 import com.kuntur.mediapro.data.MediaRepository
 import com.kuntur.mediapro.player.DrmHelper
+import com.kuntur.mediapro.player.StreamPlayerFactory
 import com.kuntur.mediapro.ui.theme.KunturMediaProTheme
 import com.kuntur.mediapro.update.UpdateManager
 import kotlinx.coroutines.delay
@@ -54,15 +60,20 @@ private val NavyMid = Color(0xFF132337)
 private val CardBg = Color(0xFF1A2D45)
 private val Gold = Color(0xFFE8B923)
 
+@OptIn(UnstableApi::class)
 class MainActivity : ComponentActivity() {
     private var player: ExoPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         try {
-            player = ExoPlayer.Builder(this).build()
+            player = StreamPlayerFactory.create(this)
         } catch (_: Exception) {
-            player = null
+            try {
+                player = ExoPlayer.Builder(this).build()
+            } catch (_: Exception) {
+                player = null
+            }
         }
         setContent {
             KunturMediaProTheme {
@@ -78,6 +89,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // No liberar: permite audio en segundo plano simple al salir de pantalla
     }
 
     override fun onDestroy() {
@@ -98,6 +114,7 @@ fun canAccess(context: android.content.Context, item: MediaItem): Boolean {
     return approved && plan != "free"
 }
 
+@OptIn(UnstableApi::class)
 @Composable
 fun AppRoot(player: ExoPlayer) {
     val context = LocalContext.current
@@ -257,9 +274,26 @@ fun AppRoot(player: ExoPlayer) {
             onBack = {
                 try {
                     player.stop()
+                    player.clearMediaItems()
                 } catch (_: Exception) {
                 }
                 screen = "home"
+            },
+            onRetry = {
+                try {
+                    val item = currentItem!!
+                    val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
+                    val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
+                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!, item.title)
+                    } else {
+                        DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
+                    }
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.playWhenReady = true
+                    player.play()
+                } catch (_: Exception) {
+                }
             }
         )
         screen == "plans" -> PlansScreen(
@@ -282,13 +316,17 @@ fun AppRoot(player: ExoPlayer) {
                 }
                 try {
                     currentItem = item
+                    val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
                     val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
-                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!)
+                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!, item.title)
                     } else {
-                        DrmHelper.createClearMediaItem(item.streamUrl)
+                        DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
                     }
+                    player.stop()
+                    player.clearMediaItems()
                     player.setMediaItem(mediaItem)
                     player.prepare()
+                    player.playWhenReady = true
                     player.play()
                     screen = "player"
                 } catch (_: Exception) {
@@ -389,7 +427,6 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
         }
     }
 
-    // UNA sola lista con scroll vertical (evita crash por LazyColumn anidados)
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -489,23 +526,132 @@ fun MediaRow(item: MediaItem, onPlay: (MediaItem) -> Unit) {
     }
 }
 
+@OptIn(UnstableApi::class)
 @Composable
-fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(Navy).padding(16.dp)) {
+fun PlayerScreen(
+    item: MediaItem,
+    player: ExoPlayer,
+    onBack: () -> Unit,
+    onRetry: () -> Unit
+) {
+    var isBuffering by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = playbackState == Player.STATE_BUFFERING ||
+                    playbackState == Player.STATE_IDLE
+                if (playbackState == Player.STATE_READY) {
+                    errorMsg = null
+                    isBuffering = false
+                }
+                if (playbackState == Player.STATE_ENDED) {
+                    isPlaying = false
+                }
+            }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                errorMsg = StreamPlayerFactory.humanError(error)
+                isBuffering = false
+            }
+        }
+        player.addListener(listener)
+        // Estado inicial
+        isBuffering = player.playbackState == Player.STATE_BUFFERING ||
+            player.playbackState == Player.STATE_IDLE
+        isPlaying = player.isPlaying
+        onDispose { player.removeListener(listener) }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Navy)
+            .padding(16.dp)
+    ) {
         TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
         Text(item.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text(item.category, color = Color.White.copy(0.55f), fontSize = 13.sp)
         Spacer(Modifier.height(16.dp))
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = player
-                    useController = true
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = player
+                        useController = true
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                        controllerShowTimeoutMs = 4000
+                        setKeepContentOnPlayerReset(true)
+                    }
+                },
+                update = { it.player = player },
+                modifier = Modifier.fillMaxSize()
+            )
+
+            if (isBuffering && errorMsg == null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Gold)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Cargando stream…", color = Color.White.copy(0.8f), fontSize = 13.sp)
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(16.dp))
-        )
+            }
+
+            if (errorMsg != null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(16.dp)
+                ) {
+                    Text(
+                        errorMsg!!,
+                        color = Color(0xFFFF8A80),
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            errorMsg = null
+                            isBuffering = true
+                            onRetry()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold)
+                    ) {
+                        Icon(Icons.Default.Refresh, null, tint = Navy)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Reintentar", color = Navy)
+                    }
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
-        Text("Reproduciendo: ${item.category}", color = Color.White.copy(0.6f))
+        val status = when {
+            errorMsg != null -> "Error"
+            isBuffering -> "Buffering…"
+            isPlaying -> "Reproduciendo"
+            else -> "Pausado"
+        }
+        Text("$status · ${item.category}", color = Color.White.copy(0.65f), fontSize = 14.sp)
+        Text(
+            "Motor: Media3 ExoPlayer (HLS / DASH / MP3 / MP4)",
+            color = Color.White.copy(0.35f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 6.dp)
+        )
     }
 }
 
