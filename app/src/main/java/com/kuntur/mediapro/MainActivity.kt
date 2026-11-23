@@ -1,9 +1,7 @@
 package com.kuntur.mediapro
 
 import android.app.Activity
-import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -83,7 +81,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppRoot(player: ExoPlayer) {
     val context = LocalContext.current
-    val activity = context as Activity
     val scope = rememberCoroutineScope()
     var showSplash by remember { mutableStateOf(true) }
     var loggedIn by remember { mutableStateOf(AuthManager.isLoggedIn(context)) }
@@ -93,11 +90,11 @@ fun AppRoot(player: ExoPlayer) {
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
 
+    // Solo email/perfil: evita fallos extra por idToken si el Client ID no es Web
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
-            .requestIdToken(GoogleAuthConfig.WEB_CLIENT_ID)
             .build()
     }
     val googleClient = remember { GoogleSignIn.getClient(context, gso) }
@@ -111,14 +108,19 @@ fun AppRoot(player: ExoPlayer) {
             val email = account?.email ?: ""
             val name = account?.displayName ?: email.ifBlank { "Usuario Google" }
             if (email.isBlank()) {
-                loginError = "No se obtuvo el correo de Google. Revise el Client ID (tipo Web)."
+                loginError = "No se obtuvo el correo. Intente de nuevo."
             } else {
                 AuthManager.login(context, email, name)
                 loggedIn = true
                 loginError = null
             }
         } catch (e: ApiException) {
-            loginError = "Error Google (${e.statusCode}). Compruebe SHA-1 y Client ID Web."
+            loginError = when (e.statusCode) {
+                10 -> "Error 10: SHA-1 del APK no coincide con Google Cloud. Use «Entrar como dueño» o registre el SHA-1 de ESTE APK."
+                12501 -> "Inicio de sesión cancelado."
+                7 -> "Sin red. Compruebe su conexión."
+                else -> "Error Google (${e.statusCode}). Use «Entrar como dueño» si persiste."
+            }
         } catch (e: Exception) {
             loginError = e.message ?: "Error al iniciar sesión"
         }
@@ -127,7 +129,6 @@ fun AppRoot(player: ExoPlayer) {
     LaunchedEffect(Unit) {
         delay(1600)
         showSplash = false
-        // Sesión Google ya guardada en el dispositivo
         val existing = GoogleSignIn.getLastSignedInAccount(context)
         if (existing?.email != null && !loggedIn) {
             AuthManager.login(context, existing.email!!, existing.displayName ?: existing.email!!)
@@ -320,6 +321,13 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit, onOwnerFallback: () -> Uni
             TextButton(onClick = onOwnerFallback) {
                 Text("Entrar como dueño (sin Google)", color = Gold, fontSize = 13.sp)
             }
+            Text(
+                "El acceso de dueño desbloquea todo el contenido.",
+                color = Color.White.copy(0.4f),
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }
@@ -420,7 +428,6 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
     val context = LocalContext.current
     val current = PurchaseManager.getCurrentPlan(context)
     val approved = PurchaseManager.isApproved(context)
-    val history = TransactionManager.getHistory(context)
     val owner = AuthManager.isOwner(context)
 
     Column(Modifier.fillMaxSize().background(Navy).padding(18.dp)) {
