@@ -384,7 +384,7 @@ fun PlansScreen(onBack: () -> Unit) {
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Column(modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(plan.name, color = Color.White, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         Text("S/ ${plan.price}", color = Color(0xFFD4A017), fontWeight = FontWeight.Bold)
