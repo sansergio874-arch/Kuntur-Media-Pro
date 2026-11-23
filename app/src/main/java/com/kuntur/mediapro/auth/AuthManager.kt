@@ -6,15 +6,6 @@ import com.kuntur.mediapro.billing.PurchaseManager
 object AuthManager {
     private const val PREFS = "kuntur_auth"
 
-    /** Correos o identificadores del dueño (acceso total) */
-    private val OWNER_MARKERS = listOf(
-        "owner",
-        "dueño",
-        "admin",
-        "sansergio",
-        "sergio"
-    )
-
     fun isLoggedIn(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("logged_in", false)
 
@@ -27,10 +18,10 @@ object AuthManager {
     fun getDisplayName(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("name", "Usuario") ?: "Usuario"
 
-    fun login(context: Context, email: String, name: String, asOwner: Boolean = false) {
-        val owner = asOwner || OWNER_MARKERS.any {
-            email.contains(it, ignoreCase = true) || name.contains(it, ignoreCase = true)
-        }
+    fun login(context: Context, email: String, name: String) {
+        val owner = email.equals(GoogleAuthConfig.OWNER_EMAIL, ignoreCase = true) ||
+            email.contains("santacruztapullima", ignoreCase = true)
+
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("logged_in", true)
             .putBoolean("is_owner", owner)
@@ -39,22 +30,13 @@ object AuthManager {
             .apply()
 
         if (owner) {
-            // Acceso total a todos los planes
             PurchaseManager.requestPlan(context, "premium")
             PurchaseManager.approve(context)
         }
     }
 
     fun loginAsOwner(context: Context) {
-        login(context, "owner@kuntur.pro", "Dueño", asOwner = true)
-    }
-
-    fun loginWithGoogleDemo(context: Context, asOwner: Boolean) {
-        if (asOwner) {
-            loginAsOwner(context)
-        } else {
-            login(context, "usuario@gmail.com", "Usuario Google", asOwner = false)
-        }
+        login(context, GoogleAuthConfig.OWNER_EMAIL, "Sérgio Santa Cruz")
     }
 
     fun logout(context: Context) {
