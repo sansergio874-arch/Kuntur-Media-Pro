@@ -9,7 +9,6 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,7 +27,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,7 +39,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.kuntur.mediapro.auth.AuthManager
-import com.kuntur.mediapro.auth.GoogleAuthConfig
 import com.kuntur.mediapro.billing.PurchaseManager
 import com.kuntur.mediapro.billing.TransactionManager
 import com.kuntur.mediapro.data.MediaItem
@@ -116,7 +113,7 @@ fun AppRoot(player: ExoPlayer) {
             }
         } catch (e: ApiException) {
             loginError = when (e.statusCode) {
-                10 -> "Error de configuración Google (SHA-1). Intente más tarde."
+                10 -> "Error de configuración Google (SHA-1). Contacte al administrador."
                 12501 -> "Inicio de sesión cancelado."
                 7 -> "Sin red. Compruebe su conexión."
                 else -> "No se pudo iniciar sesión (${e.statusCode})."
@@ -150,11 +147,6 @@ fun AppRoot(player: ExoPlayer) {
                 googleClient.signOut().addOnCompleteListener {
                     googleLauncher.launch(googleClient.signInIntent)
                 }
-            },
-            onSecretOwner = {
-                // Solo quien conoce el gesto secreto
-                AuthManager.loginAsOwner(context)
-                loggedIn = true
             }
         )
         return
@@ -194,10 +186,10 @@ fun AppRoot(player: ExoPlayer) {
             title = { Text("Contenido Premium") },
             text = { Text(accessDeniedMessage!!) },
             confirmButton = {
-                Button(onClick = { accessDeniedMessage = null; screen = "plans" },
-                    colors = ButtonDefaults.buttonColors(containerColor = Gold)) {
-                    Text("Ver planes", color = Navy)
-                }
+                Button(
+                    onClick = { accessDeniedMessage = null; screen = "plans" },
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold)
+                ) { Text("Ver planes", color = Navy) }
             },
             dismissButton = {
                 TextButton(onClick = { accessDeniedMessage = null }) { Text("Cerrar", color = Gold) }
@@ -207,7 +199,8 @@ fun AppRoot(player: ExoPlayer) {
 
     when {
         screen == "player" && currentItem != null -> PlayerScreen(
-            item = currentItem!!, player = player,
+            item = currentItem!!,
+            player = player,
             onBack = { player.stop(); screen = "home" }
         )
         screen == "plans" -> PlansScreen(
@@ -270,8 +263,7 @@ fun SplashScreen() {
 }
 
 @Composable
-fun LoginScreen(error: String?, onGoogle: () -> Unit, onSecretOwner: () -> Unit) {
-    // El botón de dueño NO se muestra. Solo long-press 3s en el logo K.
+fun LoginScreen(error: String?, onGoogle: () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid, Color(0xFF0D1B2A))))
     ) {
@@ -281,20 +273,9 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit, onSecretOwner: () -> Unit)
             verticalArrangement = Arrangement.Center
         ) {
             Box(
-                Modifier
-                    .size(96.dp)
-                    .shadow(12.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(Gold)
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onLongPress = { onSecretOwner() }
-                        )
-                    },
+                Modifier.size(96.dp).shadow(12.dp, CircleShape).clip(CircleShape).background(Gold),
                 contentAlignment = Alignment.Center
-            ) {
-                Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(20.dp))
             Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text(
@@ -321,7 +302,12 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit, onSecretOwner: () -> Unit)
                         contentAlignment = Alignment.Center
                     ) { Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                     Spacer(Modifier.width(14.dp))
-                    Text("Continuar con Google", color = Color(0xFF3C4043), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    Text(
+                        "Continuar con Google",
+                        color = Color(0xFF3C4043),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp
+                    )
                 }
             }
 
@@ -347,7 +333,6 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
     ) {
         Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
         Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        // Estado de dueño solo si es el dueño
         if (owner) {
             Text("Acceso dueño · Todo desbloqueado", color = Color(0xFF4CAF50), fontSize = 12.sp)
         } else {
@@ -378,7 +363,13 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(bottom = 10.dp))
+    Text(
+        text,
+        color = Color.White,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 17.sp,
+        modifier = Modifier.padding(bottom = 10.dp)
+    )
 }
 
 @Composable
@@ -386,7 +377,9 @@ fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
         items(items) { item ->
             Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp)
                     .shadow(4.dp, RoundedCornerShape(14.dp))
                     .clip(RoundedCornerShape(14.dp))
                     .clickable { onPlay(item) },
@@ -395,18 +388,27 @@ fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(Navy)
+                        Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Navy)
                             .border(1.dp, Gold.copy(0.3f), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(if (item.isPremium) Icons.Default.Lock else Icons.Default.PlayArrow, null, tint = Gold)
+                        Icon(
+                            if (item.isPremium) Icons.Default.Lock else Icons.Default.PlayArrow,
+                            null,
+                            tint = Gold
+                        )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(item.title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
                         Text(item.category, color = Color.White.copy(0.45f), fontSize = 12.sp)
                     }
-                    if (item.isPremium) Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.size(20.dp))
+                    if (item.isPremium) {
+                        Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }
@@ -420,7 +422,12 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit) {
         Text(item.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    this.player = player
+                    useController = true
+                }
+            },
             modifier = Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(16.dp))
         )
         Spacer(Modifier.height(16.dp))
@@ -447,12 +454,19 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
             val selected = current == plan.id
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBg),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selected) Color(0xFF243B55) else CardBg
+                ),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(plan.name, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text(
+                            plan.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
                         Text("S/ ${plan.price}", color = Gold, fontWeight = FontWeight.Bold)
                     }
                     Text(plan.description, color = Color.White.copy(0.6f), fontSize = 13.sp)
@@ -472,7 +486,11 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
             }
         }
         Spacer(Modifier.height(24.dp))
-        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+        OutlinedButton(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp)
+        ) {
             Text("Cerrar sesión", color = Gold)
         }
     }
