@@ -1,6 +1,5 @@
 package com.kuntur.mediapro
 
-import android.app.Activity
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -10,6 +9,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -90,7 +91,6 @@ fun AppRoot(player: ExoPlayer) {
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
 
-    // Solo email/perfil: evita fallos extra por idToken si el Client ID no es Web
     val gso = remember {
         GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
@@ -116,10 +116,10 @@ fun AppRoot(player: ExoPlayer) {
             }
         } catch (e: ApiException) {
             loginError = when (e.statusCode) {
-                10 -> "Error 10: SHA-1 del APK no coincide con Google Cloud. Use «Entrar como dueño» o registre el SHA-1 de ESTE APK."
+                10 -> "Error de configuración Google (SHA-1). Intente más tarde."
                 12501 -> "Inicio de sesión cancelado."
                 7 -> "Sin red. Compruebe su conexión."
-                else -> "Error Google (${e.statusCode}). Use «Entrar como dueño» si persiste."
+                else -> "No se pudo iniciar sesión (${e.statusCode})."
             }
         } catch (e: Exception) {
             loginError = e.message ?: "Error al iniciar sesión"
@@ -151,7 +151,8 @@ fun AppRoot(player: ExoPlayer) {
                     googleLauncher.launch(googleClient.signInIntent)
                 }
             },
-            onOwnerFallback = {
+            onSecretOwner = {
+                // Solo quien conoce el gesto secreto
                 AuthManager.loginAsOwner(context)
                 loggedIn = true
             }
@@ -269,7 +270,8 @@ fun SplashScreen() {
 }
 
 @Composable
-fun LoginScreen(error: String?, onGoogle: () -> Unit, onOwnerFallback: () -> Unit) {
+fun LoginScreen(error: String?, onGoogle: () -> Unit, onSecretOwner: () -> Unit) {
+    // El botón de dueño NO se muestra. Solo long-press 3s en el logo K.
     Box(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid, Color(0xFF0D1B2A))))
     ) {
@@ -279,9 +281,20 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit, onOwnerFallback: () -> Uni
             verticalArrangement = Arrangement.Center
         ) {
             Box(
-                Modifier.size(96.dp).shadow(12.dp, CircleShape).clip(CircleShape).background(Gold),
+                Modifier
+                    .size(96.dp)
+                    .shadow(12.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Gold)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onLongPress = { onSecretOwner() }
+                        )
+                    },
                 contentAlignment = Alignment.Center
-            ) { Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold) }
+            ) {
+                Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+            }
             Spacer(Modifier.height(20.dp))
             Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text(
@@ -316,18 +329,6 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit, onOwnerFallback: () -> Uni
                 Spacer(Modifier.height(12.dp))
                 Text(error, color = Color(0xFFFF8A80), fontSize = 12.sp, textAlign = TextAlign.Center)
             }
-
-            Spacer(Modifier.height(18.dp))
-            TextButton(onClick = onOwnerFallback) {
-                Text("Entrar como dueño (sin Google)", color = Gold, fontSize = 13.sp)
-            }
-            Text(
-                "El acceso de dueño desbloquea todo el contenido.",
-                color = Color.White.copy(0.4f),
-                fontSize = 11.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp)
-            )
         }
     }
 }
@@ -346,12 +347,16 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
     ) {
         Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
         Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Text(
-            if (owner) "Acceso dueño · Todo desbloqueado"
-            else "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
-            color = Color.White.copy(0.5f),
-            fontSize = 12.sp
-        )
+        // Estado de dueño solo si es el dueño
+        if (owner) {
+            Text("Acceso dueño · Todo desbloqueado", color = Color(0xFF4CAF50), fontSize = 12.sp)
+        } else {
+            Text(
+                "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
+                color = Color.White.copy(0.5f),
+                fontSize = 12.sp
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = onPlans,
@@ -434,7 +439,9 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
         TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
         Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Yape: 955238172", color = Gold, fontWeight = FontWeight.SemiBold)
-        if (owner) Text("Modo dueño: todo activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+        if (owner) {
+            Text("Modo dueño: todo activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+        }
         Spacer(Modifier.height(16.dp))
         PurchaseManager.plans.forEach { plan ->
             val selected = current == plan.id
