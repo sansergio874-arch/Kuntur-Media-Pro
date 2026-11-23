@@ -11,8 +11,7 @@ import java.net.URL
 object UpdateManager {
 
     private const val GITHUB_REPO = "sansergio874-arch/Kuntur-Media-Pro"
-    /** Debe coincidir con versionName del APK instalado */
-    const val CURRENT_VERSION = "1.2"
+    const val CURRENT_VERSION = "1.3"
 
     private const val PREFS = "kuntur_update"
 
@@ -50,8 +49,7 @@ object UpdateManager {
             val version = json.substringAfter("\"tag_name\":\"").substringBefore("\"").removePrefix("v")
             if (!isNewer(version, CURRENT_VERSION)) return@withContext null
             if (wasDismissed(context, version)) return@withContext null
-            // Prefer asset ending in .apk
-            val apkUrl = Regex("\"browser_download_url\":\"([^\"]+\.apk)\"")
+            val apkUrl = Regex("\"browser_download_url\":\"([^\"]+\\.apk)\"")
                 .find(json)?.groupValues?.get(1)
                 ?: return@withContext null
             UpdateInfo(version, apkUrl)
