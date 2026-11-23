@@ -59,11 +59,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        player = ExoPlayer.Builder(this).build()
+        try {
+            player = ExoPlayer.Builder(this).build()
+        } catch (_: Exception) {
+            player = null
+        }
         setContent {
             KunturMediaProTheme {
                 Surface(Modifier.fillMaxSize(), color = Navy) {
-                    AppRoot(player!!)
+                    val p = player
+                    if (p != null) {
+                        AppRoot(p)
+                    } else {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Error al iniciar el reproductor", color = Color.White)
+                        }
+                    }
                 }
             }
         }
@@ -71,12 +82,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        player?.release()
+        try {
+            player?.release()
+        } catch (_: Exception) {
+        }
         player = null
     }
 }
 
-/** True si el usuario puede reproducir este ítem */
 fun canAccess(context: android.content.Context, item: MediaItem): Boolean {
     if (!item.isPremium) return true
     if (AuthManager.isOwner(context)) return true
@@ -103,21 +116,26 @@ fun AppRoot(player: ExoPlayer) {
             .requestProfile()
             .build()
     }
-    val googleClient = remember { GoogleSignIn.getClient(context, gso) }
+    val googleClient = remember {
+        try {
+            GoogleSignIn.getClient(context, gso)
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     val googleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             val account = task.getResult(ApiException::class.java)
             val email = account?.email ?: ""
             val name = account?.displayName ?: email.ifBlank { "Usuario Google" }
             if (email.isBlank()) {
-                loginError = "No se obtuvo el correo. Intente de nuevo."
+                loginError = "No se obtuvo el correo."
             } else {
                 AuthManager.login(context, email, name)
-                // Refuerzo: dueño siempre premium aprobado
                 if (AuthManager.isOwner(context)) {
                     PurchaseManager.requestPlan(context, "premium")
                     PurchaseManager.approve(context)
@@ -127,9 +145,9 @@ fun AppRoot(player: ExoPlayer) {
             }
         } catch (e: ApiException) {
             loginError = when (e.statusCode) {
-                10 -> "Error de configuración Google (SHA-1). Contacte al administrador."
+                10 -> "Error Google (SHA-1). Contacte al administrador."
                 12501 -> "Inicio de sesión cancelado."
-                7 -> "Sin red. Compruebe su conexión."
+                7 -> "Sin red."
                 else -> "No se pudo iniciar sesión (${e.statusCode})."
             }
         } catch (e: Exception) {
@@ -138,23 +156,25 @@ fun AppRoot(player: ExoPlayer) {
     }
 
     LaunchedEffect(Unit) {
-        delay(1600)
+        delay(1500)
         showSplash = false
-        val existing = GoogleSignIn.getLastSignedInAccount(context)
-        if (existing?.email != null && !loggedIn) {
-            AuthManager.login(context, existing.email!!, existing.displayName ?: existing.email!!)
-            if (AuthManager.isOwner(context)) {
-                PurchaseManager.requestPlan(context, "premium")
-                PurchaseManager.approve(context)
+        try {
+            val existing = GoogleSignIn.getLastSignedInAccount(context)
+            if (existing?.email != null && !AuthManager.isLoggedIn(context)) {
+                AuthManager.login(context, existing.email!!, existing.displayName ?: existing.email!!)
+                loggedIn = true
             }
-            loggedIn = true
+        } catch (_: Exception) {
         }
-        // Si ya está logueado como dueño, asegurar premium
         if (AuthManager.isLoggedIn(context) && AuthManager.isOwner(context)) {
             PurchaseManager.requestPlan(context, "premium")
             PurchaseManager.approve(context)
         }
-        updateInfo = UpdateManager.checkForUpdate(context)
+        loggedIn = AuthManager.isLoggedIn(context)
+        try {
+            updateInfo = UpdateManager.checkForUpdate(context)
+        } catch (_: Exception) {
+        }
     }
 
     if (showSplash) {
@@ -167,8 +187,13 @@ fun AppRoot(player: ExoPlayer) {
             error = loginError,
             onGoogle = {
                 loginError = null
-                googleClient.signOut().addOnCompleteListener {
-                    googleLauncher.launch(googleClient.signInIntent)
+                val client = googleClient
+                if (client == null) {
+                    loginError = "Google Play Services no disponible."
+                } else {
+                    client.signOut().addOnCompleteListener {
+                        googleLauncher.launch(client.signInIntent)
+                    }
                 }
             }
         )
@@ -189,7 +214,12 @@ fun AppRoot(player: ExoPlayer) {
                         val url = updateInfo!!.downloadUrl
                         UpdateManager.dismiss(context, updateInfo!!.version)
                         updateInfo = null
-                        scope.launch { UpdateManager.downloadAndInstall(context, url) }
+                        scope.launch {
+                            try {
+                                UpdateManager.downloadAndInstall(context, url)
+                            } catch (_: Exception) {
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Gold)
                 ) { Text("Actualizar", color = Navy) }
@@ -224,12 +254,21 @@ fun AppRoot(player: ExoPlayer) {
         screen == "player" && currentItem != null -> PlayerScreen(
             item = currentItem!!,
             player = player,
-            onBack = { player.stop(); screen = "home" }
+            onBack = {
+                try {
+                    player.stop()
+                } catch (_: Exception) {
+                }
+                screen = "home"
+            }
         )
         screen == "plans" -> PlansScreen(
             onBack = { screen = "home" },
             onLogout = {
-                googleClient.signOut()
+                try {
+                    googleClient?.signOut()
+                } catch (_: Exception) {
+                }
                 AuthManager.logout(context)
                 loggedIn = false
             }
@@ -241,16 +280,20 @@ fun AppRoot(player: ExoPlayer) {
                         "Contenido Premium. Pague por Yape 955238172 y espere aprobación."
                     return@HomeScreen
                 }
-                currentItem = item
-                val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
-                    DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!)
-                } else {
-                    DrmHelper.createClearMediaItem(item.streamUrl)
+                try {
+                    currentItem = item
+                    val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
+                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!)
+                    } else {
+                        DrmHelper.createClearMediaItem(item.streamUrl)
+                    }
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.play()
+                    screen = "player"
+                } catch (_: Exception) {
+                    accessDeniedMessage = "No se pudo reproducir este contenido."
                 }
-                player.setMediaItem(mediaItem)
-                player.prepare()
-                player.play()
-                screen = "player"
             },
             onPlans = { screen = "plans" }
         )
@@ -339,7 +382,6 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
     val name = AuthManager.getDisplayName(context)
     val owner = AuthManager.isOwner(context)
 
-    // Asegurar premium si es dueño cada vez que se muestra home
     LaunchedEffect(owner) {
         if (owner) {
             PurchaseManager.requestPlan(context, "premium")
@@ -347,91 +389,101 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid)))
-            .padding(horizontal = 18.dp, vertical = 12.dp)
+    // UNA sola lista con scroll vertical (evita crash por LazyColumn anidados)
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Navy, NavyMid))),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
     ) {
-        Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
-        Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        if (owner) {
-            Text("Acceso dueño · Todo desbloqueado", color = Color(0xFF4CAF50), fontSize = 12.sp)
-        } else {
-            Text(
-                "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
-                color = Color.White.copy(0.5f),
-                fontSize = 12.sp
-            )
+        item {
+            Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
+            Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            if (owner) {
+                Text("Acceso dueño · Todo desbloqueado", color = Color(0xFF4CAF50), fontSize = 12.sp)
+            } else {
+                Text(
+                    "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
+                    color = Color.White.copy(0.5f),
+                    fontSize = 12.sp
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onPlans,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Gold),
+                shape = RoundedCornerShape(14.dp)
+            ) { Text("Planes y Yape 955238172", color = Navy, fontWeight = FontWeight.Bold) }
+            Spacer(Modifier.height(22.dp))
+            Text("Radios", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Spacer(Modifier.height(10.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = onPlans,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Gold),
-            shape = RoundedCornerShape(14.dp)
-        ) { Text("Planes y Yape 955238172", color = Navy, fontWeight = FontWeight.Bold) }
-        Spacer(Modifier.height(22.dp))
-        SectionTitle("Radios")
-        MediaList(MediaRepository.radios, onPlay)
-        Spacer(Modifier.height(14.dp))
-        SectionTitle("Canales TV")
-        MediaList(MediaRepository.channels, onPlay)
-        Spacer(Modifier.height(14.dp))
-        SectionTitle("Películas")
-        MediaList(MediaRepository.movies, onPlay)
+        items(MediaRepository.radios, key = { it.id }) { item ->
+            MediaRow(item, onPlay)
+        }
+        item {
+            Spacer(Modifier.height(18.dp))
+            Text("Canales TV", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Spacer(Modifier.height(10.dp))
+        }
+        items(MediaRepository.channels, key = { it.id }) { item ->
+            MediaRow(item, onPlay)
+        }
+        item {
+            Spacer(Modifier.height(18.dp))
+            Text("Películas", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Spacer(Modifier.height(10.dp))
+        }
+        items(MediaRepository.movies, key = { it.id }) { item ->
+            MediaRow(item, onPlay)
+        }
+        item { Spacer(Modifier.height(32.dp)) }
     }
 }
 
 @Composable
-fun SectionTitle(text: String) {
-    Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(bottom = 10.dp))
-}
-
-@Composable
-fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
+fun MediaRow(item: MediaItem, onPlay: (MediaItem) -> Unit) {
     val context = LocalContext.current
-    LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
-        items(items) { item ->
-            val unlocked = canAccess(context, item)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp)
-                    .shadow(4.dp, RoundedCornerShape(14.dp))
-                    .clip(RoundedCornerShape(14.dp))
-                    .clickable { onPlay(item) },
-                colors = CardDefaults.cardColors(containerColor = CardBg),
-                shape = RoundedCornerShape(14.dp)
+    val unlocked = canAccess(context, item)
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp)
+            .shadow(4.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { onPlay(item) },
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Navy)
+                    .border(1.dp, Gold.copy(0.3f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
             ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Navy)
-                            .border(1.dp, Gold.copy(0.3f), RoundedCornerShape(10.dp)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (unlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = Gold
-                        )
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(item.title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                        Text(
-                            if (unlocked) item.category else "${item.category} · Bloqueado",
-                            color = Color.White.copy(0.45f),
-                            fontSize = 12.sp
-                        )
-                    }
-                    if (item.isPremium && unlocked) {
-                        Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
-                    } else if (item.isPremium && !unlocked) {
-                        Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.size(20.dp))
-                    }
-                }
+                Icon(
+                    if (unlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                    null,
+                    tint = Gold
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
+                Text(
+                    if (unlocked) item.category else "${item.category} · Bloqueado",
+                    color = Color.White.copy(0.45f),
+                    fontSize = 12.sp
+                )
+            }
+            if (item.isPremium && unlocked) {
+                Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+            } else if (item.isPremium && !unlocked) {
+                Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -464,15 +516,20 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
     val approved = PurchaseManager.isApproved(context)
     val owner = AuthManager.isOwner(context)
 
-    Column(Modifier.fillMaxSize().background(Navy).padding(18.dp)) {
-        TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
-        Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("Yape: 955238172", color = Gold, fontWeight = FontWeight.SemiBold)
-        if (owner) {
-            Text("Modo dueño: todo activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+    LazyColumn(
+        Modifier.fillMaxSize().background(Navy),
+        contentPadding = PaddingValues(18.dp)
+    ) {
+        item {
+            TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
+            Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text("Yape: 955238172", color = Gold, fontWeight = FontWeight.SemiBold)
+            if (owner) {
+                Text("Modo dueño: todo activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+            }
+            Spacer(Modifier.height(16.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        PurchaseManager.plans.forEach { plan ->
+        items(PurchaseManager.plans, key = { it.id }) { plan ->
             val selected = current == plan.id
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -502,9 +559,12 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(24.dp))
-        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-            Text("Cerrar sesión", color = Gold)
+        item {
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                Text("Cerrar sesión", color = Gold)
+            }
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
