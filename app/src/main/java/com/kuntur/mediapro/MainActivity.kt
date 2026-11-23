@@ -76,6 +76,15 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** True si el usuario puede reproducir este ítem */
+fun canAccess(context: android.content.Context, item: MediaItem): Boolean {
+    if (!item.isPremium) return true
+    if (AuthManager.isOwner(context)) return true
+    val plan = PurchaseManager.getCurrentPlan(context)
+    val approved = PurchaseManager.isApproved(context)
+    return approved && plan != "free"
+}
+
 @Composable
 fun AppRoot(player: ExoPlayer) {
     val context = LocalContext.current
@@ -108,6 +117,11 @@ fun AppRoot(player: ExoPlayer) {
                 loginError = "No se obtuvo el correo. Intente de nuevo."
             } else {
                 AuthManager.login(context, email, name)
+                // Refuerzo: dueño siempre premium aprobado
+                if (AuthManager.isOwner(context)) {
+                    PurchaseManager.requestPlan(context, "premium")
+                    PurchaseManager.approve(context)
+                }
                 loggedIn = true
                 loginError = null
             }
@@ -129,7 +143,16 @@ fun AppRoot(player: ExoPlayer) {
         val existing = GoogleSignIn.getLastSignedInAccount(context)
         if (existing?.email != null && !loggedIn) {
             AuthManager.login(context, existing.email!!, existing.displayName ?: existing.email!!)
+            if (AuthManager.isOwner(context)) {
+                PurchaseManager.requestPlan(context, "premium")
+                PurchaseManager.approve(context)
+            }
             loggedIn = true
+        }
+        // Si ya está logueado como dueño, asegurar premium
+        if (AuthManager.isLoggedIn(context) && AuthManager.isOwner(context)) {
+            PurchaseManager.requestPlan(context, "premium")
+            PurchaseManager.approve(context)
         }
         updateInfo = UpdateManager.checkForUpdate(context)
     }
@@ -213,11 +236,7 @@ fun AppRoot(player: ExoPlayer) {
         )
         else -> HomeScreen(
             onPlay = { item ->
-                val owner = AuthManager.isOwner(context)
-                val plan = PurchaseManager.getCurrentPlan(context)
-                val approved = PurchaseManager.isApproved(context)
-                val canPlay = owner || !item.isPremium || (approved && plan != "free")
-                if (!canPlay) {
+                if (!canAccess(context, item)) {
                     accessDeniedMessage =
                         "Contenido Premium. Pague por Yape 955238172 y espere aprobación."
                     return@HomeScreen
@@ -284,7 +303,6 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit) {
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 8.dp, bottom = 28.dp)
             )
-
             Surface(
                 onClick = onGoogle,
                 shape = RoundedCornerShape(14.dp),
@@ -302,15 +320,9 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit) {
                         contentAlignment = Alignment.Center
                     ) { Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                     Spacer(Modifier.width(14.dp))
-                    Text(
-                        "Continuar con Google",
-                        color = Color(0xFF3C4043),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
-                    )
+                    Text("Continuar con Google", color = Color(0xFF3C4043), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
             }
-
             if (!error.isNullOrBlank()) {
                 Spacer(Modifier.height(12.dp))
                 Text(error, color = Color(0xFFFF8A80), fontSize = 12.sp, textAlign = TextAlign.Center)
@@ -326,6 +338,14 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
     val approved = PurchaseManager.isApproved(context)
     val name = AuthManager.getDisplayName(context)
     val owner = AuthManager.isOwner(context)
+
+    // Asegurar premium si es dueño cada vez que se muestra home
+    LaunchedEffect(owner) {
+        if (owner) {
+            PurchaseManager.requestPlan(context, "premium")
+            PurchaseManager.approve(context)
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid)))
@@ -363,19 +383,15 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(
-        text,
-        color = Color.White,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        modifier = Modifier.padding(bottom = 10.dp)
-    )
+    Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(bottom = 10.dp))
 }
 
 @Composable
 fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
-    LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+    val context = LocalContext.current
+    LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
         items(items) { item ->
+            val unlocked = canAccess(context, item)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -396,17 +412,23 @@ fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            if (item.isPremium) Icons.Default.Lock else Icons.Default.PlayArrow,
-                            null,
+                            imageVector = if (unlocked) Icons.Default.PlayArrow else Icons.Default.Lock,
+                            contentDescription = null,
                             tint = Gold
                         )
                     }
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(item.title, color = Color.White, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                        Text(item.category, color = Color.White.copy(0.45f), fontSize = 12.sp)
+                        Text(
+                            if (unlocked) item.category else "${item.category} · Bloqueado",
+                            color = Color.White.copy(0.45f),
+                            fontSize = 12.sp
+                        )
                     }
-                    if (item.isPremium) {
+                    if (item.isPremium && unlocked) {
+                        Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                    } else if (item.isPremium && !unlocked) {
                         Icon(Icons.Default.Star, null, tint = Gold, modifier = Modifier.size(20.dp))
                     }
                 }
@@ -461,12 +483,7 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            plan.name,
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Text(plan.name, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Text("S/ ${plan.price}", color = Gold, fontWeight = FontWeight.Bold)
                     }
                     Text(plan.description, color = Color.White.copy(0.6f), fontSize = 13.sp)
@@ -486,11 +503,7 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
             }
         }
         Spacer(Modifier.height(24.dp))
-        OutlinedButton(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp)
-        ) {
+        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Text("Cerrar sesión", color = Gold)
         }
     }
