@@ -48,7 +48,6 @@ private val Navy = Color(0xFF0A1628)
 private val NavyMid = Color(0xFF132337)
 private val CardBg = Color(0xFF1A2D45)
 private val Gold = Color(0xFFE8B923)
-private val GoldDark = Color(0xFFC49A12)
 
 class MainActivity : ComponentActivity() {
     private var player: ExoPlayer? = null
@@ -58,7 +57,7 @@ class MainActivity : ComponentActivity() {
         player = ExoPlayer.Builder(this).build()
         setContent {
             KunturMediaProTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Navy) {
+                Surface(Modifier.fillMaxSize(), color = Navy) {
                     AppRoot(player!!)
                 }
             }
@@ -84,9 +83,9 @@ fun AppRoot(player: ExoPlayer) {
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        delay(2000)
+        delay(1800)
         showSplash = false
-        updateInfo = UpdateManager.checkForUpdate()
+        updateInfo = UpdateManager.checkForUpdate(context)
     }
 
     if (showSplash) {
@@ -96,9 +95,12 @@ fun AppRoot(player: ExoPlayer) {
 
     if (!loggedIn) {
         LoginScreen(
-            onGoogleLogin = {
-                // Sesión con Google (modo app). Para OAuth real configure WEB_CLIENT_ID en Google Cloud.
-                AuthManager.login(context, "usuario@gmail.com", "Usuario Google")
+            onGoogleUser = {
+                AuthManager.loginWithGoogleDemo(context, asOwner = false)
+                loggedIn = true
+            },
+            onGoogleOwner = {
+                AuthManager.loginAsOwner(context)
                 loggedIn = true
             }
         )
@@ -107,19 +109,28 @@ fun AppRoot(player: ExoPlayer) {
 
     if (updateInfo != null) {
         AlertDialog(
-            onDismissRequest = { updateInfo = null },
+            onDismissRequest = {
+                UpdateManager.dismiss(context, updateInfo!!.version)
+                updateInfo = null
+            },
             title = { Text("Actualización disponible") },
             text = { Text("Versión ${updateInfo?.version} lista. Se instala sin desinstalar.") },
             confirmButton = {
-                Button(onClick = {
-                    scope.launch { UpdateManager.downloadAndInstall(context, updateInfo!!.downloadUrl) }
-                    updateInfo = null
-                }, colors = ButtonDefaults.buttonColors(containerColor = Gold)) {
-                    Text("Actualizar", color = Navy)
-                }
+                Button(
+                    onClick = {
+                        val url = updateInfo!!.downloadUrl
+                        UpdateManager.dismiss(context, updateInfo!!.version)
+                        updateInfo = null
+                        scope.launch { UpdateManager.downloadAndInstall(context, url) }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold)
+                ) { Text("Actualizar ahora", color = Navy) }
             },
             dismissButton = {
-                TextButton(onClick = { updateInfo = null }) { Text("Más tarde", color = Gold) }
+                TextButton(onClick = {
+                    UpdateManager.dismiss(context, updateInfo!!.version)
+                    updateInfo = null
+                }) { Text("Más tarde", color = Gold) }
             }
         )
     }
@@ -158,9 +169,10 @@ fun AppRoot(player: ExoPlayer) {
         )
         else -> HomeScreen(
             onPlay = { item ->
+                val owner = AuthManager.isOwner(context)
                 val plan = PurchaseManager.getCurrentPlan(context)
                 val approved = PurchaseManager.isApproved(context)
-                val canPlay = !item.isPremium || (approved && plan != "free")
+                val canPlay = owner || !item.isPremium || (approved && plan != "free")
                 if (!canPlay) {
                     accessDeniedMessage =
                         "Contenido Premium. Pague por Yape 955238172 y espere la aprobación privada."
@@ -198,9 +210,7 @@ fun SplashScreen() {
             Box(
                 Modifier.size(110.dp).scale(scale).shadow(16.dp, CircleShape).clip(CircleShape).background(Gold),
                 contentAlignment = Alignment.Center
-            ) {
-                Text("K", color = Navy, fontSize = 52.sp, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("K", color = Navy, fontSize = 52.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(24.dp))
             Text("Kuntur Media Pro", color = Gold, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             Text("Radio · TV · Películas", color = Color.White.copy(0.7f), fontSize = 14.sp)
@@ -211,7 +221,7 @@ fun SplashScreen() {
 }
 
 @Composable
-fun LoginScreen(onGoogleLogin: () -> Unit) {
+fun LoginScreen(onGoogleUser: () -> Unit, onGoogleOwner: () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid, Color(0xFF0D1B2A))))
     ) {
@@ -223,22 +233,18 @@ fun LoginScreen(onGoogleLogin: () -> Unit) {
             Box(
                 Modifier.size(96.dp).shadow(12.dp, CircleShape).clip(CircleShape).background(Gold),
                 contentAlignment = Alignment.Center
-            ) {
-                Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold)
-            }
+            ) { Text("K", color = Navy, fontSize = 44.sp, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(20.dp))
             Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
             Text(
-                "Entretenimiento premium en un solo lugar",
+                "Inicie sesión para continuar",
                 color = Color.White.copy(0.65f),
                 fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp, bottom = 40.dp)
+                modifier = Modifier.padding(top = 8.dp, bottom = 36.dp)
             )
 
-            // Botón estilo Google
             Surface(
-                onClick = onGoogleLogin,
+                onClick = onGoogleUser,
                 shape = RoundedCornerShape(14.dp),
                 color = Color.White,
                 shadowElevation = 6.dp,
@@ -249,26 +255,30 @@ fun LoginScreen(onGoogleLogin: () -> Unit) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    // Icono G simplificado
                     Box(
                         Modifier.size(24.dp).clip(CircleShape).background(Color(0xFF4285F4)),
                         contentAlignment = Alignment.Center
-                    ) {
-                        Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    }
+                    ) { Text("G", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                     Spacer(Modifier.width(14.dp))
-                    Text(
-                        "Continuar con Google",
-                        color = Color(0xFF3C4043),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
-                    )
+                    Text("Continuar con Google", color = Color(0xFF3C4043), fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // Acceso dueño (solo usted) — activa Premium + todos los planes
+            OutlinedButton(
+                onClick = onGoogleOwner,
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Gold)
+            ) {
+                Text("Entrar como dueño (acceso total)", fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(Modifier.height(16.dp))
             Text(
-                "Al continuar acepta los términos de uso de Kuntur Media Pro",
+                "El acceso de dueño activa el plan Premium y todo el contenido.",
                 color = Color.White.copy(0.4f),
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
@@ -283,27 +293,22 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
     val plan = PurchaseManager.getCurrentPlan(context)
     val approved = PurchaseManager.isApproved(context)
     val name = AuthManager.getDisplayName(context)
+    val owner = AuthManager.isOwner(context)
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Navy, NavyMid)))
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Navy, NavyMid)))
             .padding(horizontal = 18.dp, vertical = 12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
-                Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text(
-                    "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
-                    color = Color.White.copy(0.5f),
-                    fontSize = 12.sp
-                )
-            }
-        }
+        Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
+        Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (owner) "Acceso dueño · Todo desbloqueado"
+            else "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
+            color = Color.White.copy(0.5f),
+            fontSize = 12.sp
+        )
 
         Spacer(Modifier.height(16.dp))
-
         Button(
             onClick = onPlans,
             modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -327,13 +332,7 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
 
 @Composable
 fun SectionTitle(text: String) {
-    Text(
-        text,
-        color = Color.White,
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        modifier = Modifier.padding(bottom = 10.dp)
-    )
+    Text(text, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.padding(bottom = 10.dp))
 }
 
 @Composable
@@ -341,31 +340,22 @@ fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
     LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
         items(items) { item ->
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp)
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
                     .shadow(4.dp, RoundedCornerShape(14.dp))
                     .clip(RoundedCornerShape(14.dp))
                     .clickable { onPlay(item) },
                 colors = CardDefaults.cardColors(containerColor = CardBg),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Row(
-                    Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(
-                        Modifier
-                            .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Navy)
+                        Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)).background(Navy)
                             .border(1.dp, Gold.copy(0.3f), RoundedCornerShape(10.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             if (item.isPremium) Icons.Default.Lock else Icons.Default.PlayArrow,
-                            null,
-                            tint = Gold
+                            null, tint = Gold
                         )
                     }
                     Spacer(Modifier.width(14.dp))
@@ -384,9 +374,7 @@ fun MediaList(items: List<MediaItem>, onPlay: (MediaItem) -> Unit) {
 
 @Composable
 fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().background(Navy).padding(16.dp)
-    ) {
+    Column(Modifier.fillMaxSize().background(Navy).padding(16.dp)) {
         TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
         Text(item.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         if (item.isPremium) Text("Premium", color = Gold, fontSize = 13.sp)
@@ -411,18 +399,15 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
     val current = PurchaseManager.getCurrentPlan(context)
     val approved = PurchaseManager.isApproved(context)
     val history = TransactionManager.getHistory(context)
+    val owner = AuthManager.isOwner(context)
 
-    Column(
-        Modifier.fillMaxSize().background(Navy).padding(18.dp)
-    ) {
+    Column(Modifier.fillMaxSize().background(Navy).padding(18.dp)) {
         TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
         Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Yape: 955238172", color = Gold, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Tras pagar, la aprobación es privada por el administrador.",
-            color = Color.White.copy(0.55f),
-            fontSize = 12.sp
-        )
+        if (owner) {
+            Text("Modo dueño: todo el contenido activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+        }
         Spacer(Modifier.height(16.dp))
 
         PurchaseManager.plans.forEach { plan ->
@@ -443,12 +428,20 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
                         onClick = {
                             PurchaseManager.requestPlan(context, plan.id)
                             TransactionManager.createTransaction(context, plan.id, plan.name, plan.price)
+                            if (owner) PurchaseManager.approve(context)
                         },
-                        enabled = !selected,
+                        enabled = !selected || !approved,
                         colors = ButtonDefaults.buttonColors(containerColor = Gold),
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text(if (selected) "Solicitado" else "Seleccionar · Pagar Yape", color = Navy)
+                        Text(
+                            when {
+                                selected && approved -> "Activo"
+                                selected -> "Solicitado"
+                                else -> "Seleccionar · Pagar Yape"
+                            },
+                            color = Navy
+                        )
                     }
                 }
             }
@@ -464,21 +457,12 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Text("Historial", color = Color.White, fontWeight = FontWeight.Medium)
             history.take(5).forEach { tx ->
-                Text(
-                    "${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status}",
-                    color = Color.White.copy(0.5f),
-                    fontSize = 12.sp
-                )
+                Text("${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status}", color = Color.White.copy(0.5f), fontSize = 12.sp)
             }
         }
 
         Spacer(Modifier.height(24.dp))
-        OutlinedButton(
-            onClick = onLogout,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
-        ) {
+        OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
             Text("Cerrar sesión", color = Gold)
         }
     }

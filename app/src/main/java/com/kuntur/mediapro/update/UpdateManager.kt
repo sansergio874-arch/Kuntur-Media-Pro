@@ -11,18 +11,49 @@ import java.net.URL
 object UpdateManager {
 
     private const val GITHUB_REPO = "sansergio874-arch/Kuntur-Media-Pro"
-    const val CURRENT_VERSION = "1.0"
+    /** Debe coincidir con versionName del APK instalado */
+    const val CURRENT_VERSION = "1.2"
+
+    private const val PREFS = "kuntur_update"
 
     data class UpdateInfo(val version: String, val downloadUrl: String)
 
-    suspend fun checkForUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
+    fun wasDismissed(context: Context, version: String): Boolean {
+        val last = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString("dismissed_version", "") ?: ""
+        return last == version
+    }
+
+    fun dismiss(context: Context, version: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("dismissed_version", version)
+            .apply()
+    }
+
+    private fun isNewer(remote: String, current: String): Boolean {
+        val r = remote.removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+        val c = current.removePrefix("v").split(".").mapNotNull { it.toIntOrNull() }
+        val max = maxOf(r.size, c.size)
+        for (i in 0 until max) {
+            val rv = r.getOrElse(i) { 0 }
+            val cv = c.getOrElse(i) { 0 }
+            if (rv > cv) return true
+            if (rv < cv) return false
+        }
+        return false
+    }
+
+    suspend fun checkForUpdate(context: Context): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
             val json = URL("https://api.github.com/repos/$GITHUB_REPO/releases/latest").readText()
             if (!json.contains("tag_name")) return@withContext null
             val version = json.substringAfter("\"tag_name\":\"").substringBefore("\"").removePrefix("v")
-            if (version <= CURRENT_VERSION) return@withContext null
-            val apkUrl = json.substringAfter("\"browser_download_url\":\"").substringBefore("\"")
-            if (apkUrl.isBlank()) return@withContext null
+            if (!isNewer(version, CURRENT_VERSION)) return@withContext null
+            if (wasDismissed(context, version)) return@withContext null
+            // Prefer asset ending in .apk
+            val apkUrl = Regex("\"browser_download_url\":\"([^\"]+\.apk)\"")
+                .find(json)?.groupValues?.get(1)
+                ?: return@withContext null
             UpdateInfo(version, apkUrl)
         } catch (e: Exception) {
             null
