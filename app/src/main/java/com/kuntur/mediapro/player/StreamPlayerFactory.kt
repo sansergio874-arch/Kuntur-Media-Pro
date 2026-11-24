@@ -11,19 +11,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 
 /**
- * Fábrica simple y estable de ExoPlayer.
- * Evita APIs inestables y dependencias extra que provocaban cierres.
+ * Fábrica estable de ExoPlayer para radio, TV (HLS) y películas (MP4).
  */
 object StreamPlayerFactory {
 
     private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/1.5"
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/1.7"
 
     fun create(context: Context): ExoPlayer {
         return try {
             createConfigured(context)
         } catch (_: Throwable) {
-            // Fallback mínimo si la configuración avanzada falla
             ExoPlayer.Builder(context).build().apply {
                 playWhenReady = true
                 volume = 1f
@@ -34,8 +32,8 @@ object StreamPlayerFactory {
     private fun createConfigured(context: Context): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
-            .setConnectTimeoutMs(20_000)
-            .setReadTimeoutMs(30_000)
+            .setConnectTimeoutMs(25_000)
+            .setReadTimeoutMs(35_000)
             .setAllowCrossProtocolRedirects(true)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
@@ -44,26 +42,36 @@ object StreamPlayerFactory {
             .setDataSourceFactory(dataSourceFactory)
 
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(10_000, 40_000, 2_000, 4_000)
+            .setBufferDurationsMs(8_000, 40_000, 1_500, 3_000)
             .build()
 
-        return ExoPlayer.Builder(context)
+        val builder = ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
             .setHandleAudioBecomingNoisy(true)
-            .build()
-            .apply {
-                playWhenReady = true
-                repeatMode = Player.REPEAT_MODE_OFF
-                volume = 1f
-            }
+
+        // WAKE_LOCK ya está en el manifest; si fallara, se omite
+        try {
+            builder.setWakeMode(C.WAKE_MODE_NETWORK)
+        } catch (_: Throwable) {
+            // sin wake mode
+        }
+
+        return builder.build().apply {
+            playWhenReady = true
+            repeatMode = Player.REPEAT_MODE_OFF
+            volume = 1f
+        }
     }
 
     fun humanError(error: PlaybackException?): String {
         if (error == null) return "Error de reproducción"
+        val msg = error.message.orEmpty()
+        if (msg.contains("WAKE_LOCK", ignoreCase = true)) {
+            return "Falta permiso WAKE_LOCK. Reinstale la app actualizada."
+        }
         return when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
