@@ -15,10 +15,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +32,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -58,6 +63,8 @@ private val NavyMid = Color(0xFF132337)
 private val CardBg = Color(0xFF1A2D45)
 private val Gold = Color(0xFFE8B923)
 
+enum class AppSection { HOME, RADIOS, CHANNELS, MOVIES, PLAYER, PLANS }
+
 class MainActivity : ComponentActivity() {
     private var player: ExoPlayer? = null
 
@@ -76,12 +83,9 @@ class MainActivity : ComponentActivity() {
             KunturMediaProTheme {
                 Surface(Modifier.fillMaxSize(), color = Navy) {
                     val p = player
-                    if (p != null) {
-                        AppRoot(p)
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Error al iniciar el reproductor", color = Color.White)
-                        }
+                    if (p != null) AppRoot(p)
+                    else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Error al iniciar el reproductor", color = Color.White)
                     }
                 }
             }
@@ -90,10 +94,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try {
-            player?.release()
-        } catch (_: Throwable) {
-        }
+        try { player?.release() } catch (_: Throwable) {}
         player = null
     }
 }
@@ -112,7 +113,7 @@ fun AppRoot(player: ExoPlayer) {
     val scope = rememberCoroutineScope()
     var showSplash by remember { mutableStateOf(true) }
     var loggedIn by remember { mutableStateOf(AuthManager.isLoggedIn(context)) }
-    var screen by remember { mutableStateOf("home") }
+    var section by remember { mutableStateOf(AppSection.HOME) }
     var currentItem by remember { mutableStateOf<MediaItem?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
@@ -126,11 +127,7 @@ fun AppRoot(player: ExoPlayer) {
             .build()
     }
     val googleClient = remember {
-        try {
-            GoogleSignIn.getClient(context, gso)
-        } catch (_: Exception) {
-            null
-        }
+        try { GoogleSignIn.getClient(context, gso) } catch (_: Exception) { null }
     }
 
     val googleLauncher = rememberLauncherForActivityResult(
@@ -173,17 +170,13 @@ fun AppRoot(player: ExoPlayer) {
                 AuthManager.login(context, existing.email!!, existing.displayName ?: existing.email!!)
                 loggedIn = true
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
         if (AuthManager.isLoggedIn(context) && AuthManager.isOwner(context)) {
             PurchaseManager.requestPlan(context, "premium")
             PurchaseManager.approve(context)
         }
         loggedIn = AuthManager.isLoggedIn(context)
-        try {
-            updateInfo = UpdateManager.checkForUpdate(context)
-        } catch (_: Exception) {
-        }
+        try { updateInfo = UpdateManager.checkForUpdate(context) } catch (_: Exception) {}
     }
 
     if (showSplash) {
@@ -197,12 +190,9 @@ fun AppRoot(player: ExoPlayer) {
             onGoogle = {
                 loginError = null
                 val client = googleClient
-                if (client == null) {
-                    loginError = "Google Play Services no disponible."
-                } else {
-                    client.signOut().addOnCompleteListener {
-                        googleLauncher.launch(client.signInIntent)
-                    }
+                if (client == null) loginError = "Google Play Services no disponible."
+                else client.signOut().addOnCompleteListener {
+                    googleLauncher.launch(client.signInIntent)
                 }
             }
         )
@@ -224,10 +214,7 @@ fun AppRoot(player: ExoPlayer) {
                         UpdateManager.dismiss(context, updateInfo!!.version)
                         updateInfo = null
                         scope.launch {
-                            try {
-                                UpdateManager.downloadAndInstall(context, url)
-                            } catch (_: Exception) {
-                            }
+                            try { UpdateManager.downloadAndInstall(context, url) } catch (_: Exception) {}
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Gold)
@@ -249,7 +236,7 @@ fun AppRoot(player: ExoPlayer) {
             text = { Text(accessDeniedMessage!!) },
             confirmButton = {
                 Button(
-                    onClick = { accessDeniedMessage = null; screen = "plans" },
+                    onClick = { accessDeniedMessage = null; section = AppSection.PLANS },
                     colors = ButtonDefaults.buttonColors(containerColor = Gold)
                 ) { Text("Ver planes", color = Navy) }
             },
@@ -280,7 +267,7 @@ fun AppRoot(player: ExoPlayer) {
             return
         }
         currentItem = item
-        screen = "player"
+        section = AppSection.PLAYER
         try {
             val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
             val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
@@ -299,45 +286,79 @@ fun AppRoot(player: ExoPlayer) {
         }
     }
 
-    when {
-        screen == "player" && currentItem != null -> PlayerScreen(
-            item = currentItem!!,
-            player = player,
-            onBack = {
-                try {
-                    player.stop()
-                    player.clearMediaItems()
-                } catch (_: Exception) {
+    when (section) {
+        AppSection.PLAYER -> if (currentItem != null) {
+            PlayerScreen(
+                item = currentItem!!,
+                player = player,
+                onBack = {
+                    try {
+                        player.stop()
+                        player.clearMediaItems()
+                    } catch (_: Exception) {}
+                    section = when (currentItem?.category?.lowercase()) {
+                        "radio" -> AppSection.RADIOS
+                        "tv" -> AppSection.CHANNELS
+                        else -> AppSection.MOVIES
+                    }
+                },
+                onRetry = {
+                    val item = currentItem ?: return@PlayerScreen
+                    try {
+                        val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
+                        val mediaItem = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
+                        player.setMediaItem(mediaItem)
+                        player.prepare()
+                        player.playWhenReady = true
+                        player.play()
+                    } catch (_: Exception) {}
                 }
-                screen = "home"
-            },
-            onRetry = {
-                val item = currentItem ?: return@PlayerScreen
-                try {
-                    val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
-                    val mediaItem = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
-                    player.setMediaItem(mediaItem)
-                    player.prepare()
-                    player.playWhenReady = true
-                    player.play()
-                } catch (_: Exception) {
-                }
-            }
-        )
-        screen == "plans" -> PlansScreen(
-            onBack = { screen = "home" },
+            )
+        } else {
+            section = AppSection.HOME
+        }
+
+        AppSection.PLANS -> PlansScreen(
+            onBack = { section = AppSection.HOME },
             onLogout = {
-                try {
-                    googleClient?.signOut()
-                } catch (_: Exception) {
-                }
+                try { googleClient?.signOut() } catch (_: Exception) {}
                 AuthManager.logout(context)
                 loggedIn = false
             }
         )
-        else -> HomeScreen(
+
+        AppSection.RADIOS -> CategoryScreen(
+            title = "Emisoras de radio",
+            subtitle = "Solo emisoras · ${MediaRepository.radios.size} estaciones",
+            icon = Icons.Default.Radio,
+            items = MediaRepository.radios,
             onPlay = { startPlayback(it) },
-            onPlans = { screen = "plans" }
+            onBack = { section = AppSection.HOME }
+        )
+
+        AppSection.CHANNELS -> CategoryScreen(
+            title = "Canales de TV",
+            subtitle = "Solo canales · ${MediaRepository.channels.size} señales",
+            icon = Icons.Default.Tv,
+            items = MediaRepository.channels,
+            onPlay = { startPlayback(it) },
+            onBack = { section = AppSection.HOME }
+        )
+
+        AppSection.MOVIES -> CategoryScreen(
+            title = "Películas",
+            subtitle = "Solo películas · ${MediaRepository.movies.size} títulos",
+            icon = Icons.Default.Movie,
+            items = MediaRepository.movies,
+            onPlay = { startPlayback(it) },
+            onBack = { section = AppSection.HOME }
+        )
+
+        AppSection.HOME -> HomeHub(
+            onRadios = { section = AppSection.RADIOS },
+            onChannels = { section = AppSection.CHANNELS },
+            onMovies = { section = AppSection.MOVIES },
+            onPlans = { section = AppSection.PLANS }
         )
     }
 }
@@ -416,13 +437,19 @@ fun LoginScreen(error: String?, onGoogle: () -> Unit) {
     }
 }
 
+/** Hub principal: tres accesos separados */
 @Composable
-fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
+fun HomeHub(
+    onRadios: () -> Unit,
+    onChannels: () -> Unit,
+    onMovies: () -> Unit,
+    onPlans: () -> Unit
+) {
     val context = LocalContext.current
-    val plan = PurchaseManager.getCurrentPlan(context)
-    val approved = PurchaseManager.isApproved(context)
     val name = AuthManager.getDisplayName(context)
     val owner = AuthManager.isOwner(context)
+    val plan = PurchaseManager.getCurrentPlan(context)
+    val approved = PurchaseManager.isApproved(context)
 
     LaunchedEffect(owner) {
         if (owner) {
@@ -431,55 +458,132 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
+    Column(
+        Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Navy, NavyMid))),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)
+            .background(Brush.verticalGradient(listOf(Navy, NavyMid)))
+            .padding(20.dp)
     ) {
-        item {
-            Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
-            Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            if (owner) {
-                Text("Acceso dueño · Todo desbloqueado", color = Color(0xFF4CAF50), fontSize = 12.sp)
-            } else {
-                Text(
-                    "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
-                    color = Color.White.copy(0.5f),
-                    fontSize = 12.sp
-                )
+        Text("Hola, $name", color = Color.White.copy(0.6f), fontSize = 13.sp)
+        Text("Kuntur Media Pro", color = Gold, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (owner) "Acceso dueño · Todo desbloqueado"
+            else "Plan: $plan ${if (approved) "✓" else "· pendiente"}",
+            color = if (owner) Color(0xFF4CAF50) else Color.White.copy(0.5f),
+            fontSize = 12.sp
+        )
+        Spacer(Modifier.height(28.dp))
+        Text("Elija una sección", color = Color.White.copy(0.7f), fontSize = 14.sp)
+        Spacer(Modifier.height(14.dp))
+
+        SectionCard(
+            title = "Radios",
+            subtitle = "Solo emisoras · ${MediaRepository.radios.size} estaciones",
+            icon = Icons.Default.Radio,
+            onClick = onRadios
+        )
+        Spacer(Modifier.height(12.dp))
+        SectionCard(
+            title = "Canales TV",
+            subtitle = "Solo canales · ${MediaRepository.channels.size} señales",
+            icon = Icons.Default.Tv,
+            onClick = onChannels
+        )
+        Spacer(Modifier.height(12.dp))
+        SectionCard(
+            title = "Películas",
+            subtitle = "Solo películas · ${MediaRepository.movies.size} títulos",
+            icon = Icons.Default.Movie,
+            onClick = onMovies
+        )
+
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = onPlans,
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Gold),
+            shape = RoundedCornerShape(14.dp)
+        ) { Text("Planes y Yape 955238172", color = Navy, fontWeight = FontWeight.Bold) }
+    }
+}
+
+@Composable
+fun SectionCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(6.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = CardBg),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Navy)
+                    .border(1.dp, Gold.copy(0.4f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, null, tint = Gold, modifier = Modifier.size(28.dp))
             }
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = onPlans,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Gold),
-                shape = RoundedCornerShape(14.dp)
-            ) { Text("Planes y Yape 955238172", color = Navy, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(22.dp))
-            Text("Radios (${MediaRepository.radios.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(subtitle, color = Color.White.copy(0.5f), fontSize = 13.sp)
+            }
+            Icon(Icons.Default.PlayArrow, null, tint = Gold)
         }
-        items(MediaRepository.radios, key = { it.id }) { item ->
-            MediaRow(item, onPlay)
+    }
+}
+
+/** Pantalla dedicada: solo radios, solo TV o solo películas */
+@Composable
+fun CategoryScreen(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    items: List<MediaItem>,
+    onPlay: (MediaItem) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Navy, NavyMid)))
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(onClick = onBack) {
+                Icon(Icons.Default.Home, null, tint = Gold, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Inicio", color = Gold)
+            }
         }
-        item {
-            Spacer(Modifier.height(18.dp))
-            Text("Canales TV (${MediaRepository.channels.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-            Spacer(Modifier.height(10.dp))
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+        ) {
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(icon, null, tint = Gold, modifier = Modifier.size(28.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(title, color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                        Text(subtitle, color = Color.White.copy(0.5f), fontSize = 13.sp)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
+            items(items, key = { it.id }) { item ->
+                MediaRow(item, onPlay)
+            }
+            item { Spacer(Modifier.height(28.dp)) }
         }
-        items(MediaRepository.channels, key = { it.id }) { item ->
-            MediaRow(item, onPlay)
-        }
-        item {
-            Spacer(Modifier.height(18.dp))
-            Text("Películas (${MediaRepository.movies.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-            Spacer(Modifier.height(10.dp))
-        }
-        items(MediaRepository.movies, key = { it.id }) { item ->
-            MediaRow(item, onPlay)
-        }
-        item { Spacer(Modifier.height(32.dp)) }
     }
 }
 
@@ -550,9 +654,7 @@ fun PlayerScreen(
                     errorMsg = null
                     isBuffering = false
                 }
-                if (playbackState == Player.STATE_ENDED) {
-                    isPlaying = false
-                }
+                if (playbackState == Player.STATE_ENDED) isPlaying = false
             }
 
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -569,20 +671,21 @@ fun PlayerScreen(
             player.playbackState == Player.STATE_IDLE
         isPlaying = player.isPlaying
         onDispose {
-            try {
-                player.removeListener(listener)
-            } catch (_: Exception) {
-            }
+            try { player.removeListener(listener) } catch (_: Exception) {}
         }
     }
 
+    val sectionLabel = when (item.category.lowercase()) {
+        "radio" -> "Reproductor de radio"
+        "tv" -> "Reproductor de canales"
+        else -> "Reproductor de películas"
+    }
+
     Column(
-        Modifier
-            .fillMaxSize()
-            .background(Navy)
-            .padding(16.dp)
+        Modifier.fillMaxSize().background(Navy).padding(16.dp)
     ) {
         TextButton(onClick = onBack) { Text("← Volver", color = Gold) }
+        Text(sectionLabel, color = Gold.copy(0.8f), fontSize = 12.sp)
         Text(item.title, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(item.category, color = Color.White.copy(0.55f), fontSize = 13.sp)
         Spacer(Modifier.height(16.dp))
@@ -590,7 +693,7 @@ fun PlayerScreen(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(if (item.category.equals("Radio", true)) 180.dp else 260.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .background(Color.Black),
             contentAlignment = Alignment.Center
@@ -611,7 +714,7 @@ fun PlayerScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Gold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Cargando stream…", color = Color.White.copy(0.8f), fontSize = 13.sp)
+                    Text("Cargando…", color = Color.White.copy(0.8f), fontSize = 13.sp)
                 }
             }
 
@@ -620,12 +723,7 @@ fun PlayerScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(16.dp)
                 ) {
-                    Text(
-                        errorMsg!!,
-                        color = Color(0xFFFF8A80),
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center
-                    )
+                    Text(errorMsg!!, color = Color(0xFFFF8A80), fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = {
@@ -650,7 +748,7 @@ fun PlayerScreen(
             isPlaying -> "Reproduciendo"
             else -> "Pausado"
         }
-        Text("$status · ${item.category}", color = Color.White.copy(0.65f), fontSize = 14.sp)
+        Text("$status · $sectionLabel", color = Color.White.copy(0.65f), fontSize = 14.sp)
     }
 }
 
