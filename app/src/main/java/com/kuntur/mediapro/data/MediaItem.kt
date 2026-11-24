@@ -10,8 +10,7 @@ data class MediaItem(
 )
 
 /**
- * Radios publicas, senales IRTP (medios del Estado) y peliculas abiertas.
- * No se incluyen retransmisiones no autorizadas de canales comerciales.
+ * Radios publicas, senales IRTP y peliculas legales (dominio publico / CC / muestras).
  */
 object MediaRepository {
 
@@ -45,7 +44,6 @@ object MediaRepository {
             "https://somafm.com/img3/spacestation-400.jpg")
     )
 
-    /** Senales IRTP (Instituto de Radio y Television del Peru) via CDN publico iblups */
     val channels = listOf(
         MediaItem("c1", "TV Perú", "TV",
             "https://cdnhd.iblups.com/hls/777b4d4cc0984575a7d14f6ee57dbcaf7.m3u8", false, null),
@@ -68,30 +66,82 @@ object MediaRepository {
             "https://www.mux.com/images/mux-logo-black.png")
     )
 
-    private const val GTV = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/"
-
+    /**
+     * Peliculas legales:
+     * - Blender Open Movies (CC)
+     * - Clasicos de dominio publico (Internet Archive)
+     * - Muestras cortas de prueba
+     */
     val movies = listOf(
-        MediaItem("m1", "Big Buck Bunny", "Película",
-            "${GTV}BigBuckBunny.mp4", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/220px-Big_buck_bunny_poster_big.jpg"),
-        MediaItem("m2", "Sintel", "Película",
-            "${GTV}Sintel.mp4", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Sintel_poster.jpg/220px-Sintel_poster.jpg"),
-        MediaItem("m3", "Tears of Steel", "Película",
-            "${GTV}TearsOfSteel.mp4", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Tears_of_Steel_poster.jpg/220px-Tears_of_Steel_poster.jpg"),
-        MediaItem("m4", "Elephants Dream", "Película",
-            "${GTV}ElephantsDream.mp4", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_s5_both.jpg/220px-Elephants_Dream_s5_both.jpg"),
-        MediaItem("m5", "For Bigger Blazes", "Película", "${GTV}ForBiggerBlazes.mp4", false, null),
-        MediaItem("m6", "For Bigger Escape", "Película", "${GTV}ForBiggerEscapes.mp4", false, null),
-        MediaItem("m7", "For Bigger Fun", "Película", "${GTV}ForBiggerFun.mp4", false, null),
-        MediaItem("m8", "For Bigger Joyrides", "Película", "${GTV}ForBiggerJoyrides.mp4", false, null),
-        MediaItem("m9", "For Bigger Meltdowns", "Película", "${GTV}ForBiggerMeltdowns.mp4", false, null),
-        MediaItem("m10", "Subaru Outback", "Película", "${GTV}SubaruOutbackOnStreetAndDirt.mp4", true, null),
-        MediaItem("m11", "Volkswagen GTI", "Película", "${GTV}VolkswagenGTIReview.mp4", true, null),
-        MediaItem("m12", "What car?", "Película", "${GTV}WhatCarCanYouGetForAGrand.mp4", false, null),
-        MediaItem("m13", "We Are Going On Bullrun", "Película", "${GTV}WeAreGoingOnBullrun.mp4", true, null)
+        MediaItem(
+            "m1", "Big Buck Bunny", "Película",
+            "https://uploads.video-commander.com/sample/BigBuckBunny.mp4",
+            false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/220px-Big_buck_bunny_poster_big.jpg"
+        ),
+        MediaItem(
+            "m2", "Sintel", "Película",
+            "https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4",
+            false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Sintel_poster.jpg/220px-Sintel_poster.jpg"
+        ),
+        MediaItem(
+            "m3", "Elephants Dream", "Película",
+            "https://archive.org/download/ElephantsDream/ed_hd.mp4",
+            false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_s5_both.jpg/220px-Elephants_Dream_s5_both.jpg"
+        ),
+        MediaItem(
+            "m4", "Tears of Steel (trailer)", "Película",
+            "https://download.blender.org/mango/trailer_tears_of_steel_1080p.mov",
+            false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Tears_of_Steel_poster.jpg/220px-Tears_of_Steel_poster.jpg"
+        ),
+        MediaItem(
+            "m5", "Night of the Living Dead", "Película",
+            "https://archive.org/download/night_of_the_living_dead/night_of_the_living_dead_512kb.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m6", "The Phantom of the Opera (1925)", "Película",
+            "https://archive.org/download/ThePhantomOfTheOpera/Phantom_of_the_Opera_512kb.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m7", "Nosferatu (1922)", "Película",
+            "https://archive.org/download/nosferatucomplete/Nosferatu.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m8", "The Most Dangerous Game", "Película",
+            "https://archive.org/download/TheMostDangerousGame/TheMostDangerousGame_512kb.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m9", "House on Haunted Hill", "Película",
+            "https://archive.org/download/house_on_haunted_hill/house_on_haunted_hill_512kb.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m10", "Plan 9 from Outer Space", "Película",
+            "https://archive.org/download/Plan_9_from_Outer_Space_1959/Plan_9_from_Outer_Space_1959.mp4",
+            true, null
+        ),
+        MediaItem(
+            "m11", "Charade (1963)", "Película",
+            "https://archive.org/download/Charade1963/Charade1963.mp4",
+            true, null
+        ),
+        MediaItem(
+            "m12", "Flower (demo corto)", "Película",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+            false, null
+        ),
+        MediaItem(
+            "m13", "Big Buck Bunny 360p (corto)", "Película",
+            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
+            false, null
+        )
     )
 
     fun all() = radios + channels + movies
