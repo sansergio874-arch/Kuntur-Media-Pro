@@ -9,9 +9,6 @@ data class MediaItem(
     val logoUrl: String? = null
 )
 
-/**
- * Radios publicas, senales IRTP y peliculas legales (dominio publico / CC / muestras).
- */
 object MediaRepository {
 
     val radios = listOf(
@@ -66,82 +63,58 @@ object MediaRepository {
             "https://www.mux.com/images/mux-logo-black.png")
     )
 
-    /**
-     * Peliculas legales:
-     * - Blender Open Movies (CC)
-     * - Clasicos de dominio publico (Internet Archive)
-     * - Muestras cortas de prueba
-     */
     val movies = listOf(
-        MediaItem(
-            "m1", "Big Buck Bunny", "Película",
-            "https://uploads.video-commander.com/sample/BigBuckBunny.mp4",
-            false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/220px-Big_buck_bunny_poster_big.jpg"
-        ),
-        MediaItem(
-            "m2", "Sintel", "Película",
-            "https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4",
-            false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Sintel_poster.jpg/220px-Sintel_poster.jpg"
-        ),
-        MediaItem(
-            "m3", "Elephants Dream", "Película",
-            "https://archive.org/download/ElephantsDream/ed_hd.mp4",
-            false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_s5_both.jpg/220px-Elephants_Dream_s5_both.jpg"
-        ),
-        MediaItem(
-            "m4", "Tears of Steel (trailer)", "Película",
-            "https://download.blender.org/mango/trailer_tears_of_steel_1080p.mov",
-            false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Tears_of_Steel_poster.jpg/220px-Tears_of_Steel_poster.jpg"
-        ),
-        MediaItem(
-            "m5", "Night of the Living Dead", "Película",
-            "https://archive.org/download/night_of_the_living_dead/night_of_the_living_dead_512kb.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m6", "The Phantom of the Opera (1925)", "Película",
-            "https://archive.org/download/ThePhantomOfTheOpera/Phantom_of_the_Opera_512kb.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m7", "Nosferatu (1922)", "Película",
-            "https://archive.org/download/nosferatucomplete/Nosferatu.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m8", "The Most Dangerous Game", "Película",
-            "https://archive.org/download/TheMostDangerousGame/TheMostDangerousGame_512kb.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m9", "House on Haunted Hill", "Película",
-            "https://archive.org/download/house_on_haunted_hill/house_on_haunted_hill_512kb.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m10", "Plan 9 from Outer Space", "Película",
-            "https://archive.org/download/Plan_9_from_Outer_Space_1959/Plan_9_from_Outer_Space_1959.mp4",
-            true, null
-        ),
-        MediaItem(
-            "m11", "Charade (1963)", "Película",
-            "https://archive.org/download/Charade1963/Charade1963.mp4",
-            true, null
-        ),
-        MediaItem(
-            "m12", "Flower (demo corto)", "Película",
-            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
-            false, null
-        ),
-        MediaItem(
-            "m13", "Big Buck Bunny 360p (corto)", "Película",
-            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
-            false, null
-        )
+        // Open movies / CC
+        MediaItem("m1", "Big Buck Bunny", "Película",
+            "https://uploads.video-commander.com/sample/BigBuckBunny.mp4", false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/220px-Big_buck_bunny_poster_big.jpg"),
+        MediaItem("m2", "Sintel (trailer)", "Película",
+            "https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4", false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Sintel_poster.jpg/220px-Sintel_poster.jpg"),
+        MediaItem("m3", "Elephants Dream", "Película",
+            "https://archive.org/download/ElephantsDream/ed_hd.mp4", false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_s5_both.jpg/220px-Elephants_Dream_s5_both.jpg"),
+        MediaItem("m4", "Tears of Steel (trailer)", "Película",
+            "https://download.blender.org/mango/trailer_tears_of_steel_1080p.mov", false,
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Tears_of_Steel_poster.jpg/220px-Tears_of_Steel_poster.jpg"),
+
+        // Clasicos dominio publico
+        MediaItem("m5", "Night of the Living Dead", "Película",
+            "https://archive.org/download/night_of_the_living_dead/night_of_the_living_dead_512kb.mp4", false, null),
+        MediaItem("m6", "The Phantom of the Opera (1925)", "Película",
+            "https://archive.org/download/ThePhantomOfTheOpera/Phantom_of_the_Opera_512kb.mp4", false, null),
+        MediaItem("m7", "Nosferatu (1922)", "Película",
+            "https://archive.org/download/nosferatucomplete/Nosferatu.mp4", false, null),
+        MediaItem("m8", "The Most Dangerous Game", "Película",
+            "https://archive.org/download/TheMostDangerousGame/TheMostDangerousGame_512kb.mp4", false, null),
+        MediaItem("m9", "House on Haunted Hill", "Película",
+            "https://archive.org/download/house_on_haunted_hill/house_on_haunted_hill_512kb.mp4", false, null),
+        MediaItem("m10", "Plan 9 from Outer Space", "Película",
+            "https://archive.org/download/Plan_9_from_Outer_Space_1959/Plan_9_from_Outer_Space_1959.mp4", false, null),
+
+        // Nuevas
+        MediaItem("m11", "His Girl Friday", "Película",
+            "https://archive.org/download/HisGirlFriday1940HQ/His_Girl_Friday_1940.mp4", false, null),
+        MediaItem("m12", "Detour (1945)", "Película",
+            "https://archive.org/download/Detour/Detour.mp4", false, null),
+        MediaItem("m13", "D.O.A. (1950)", "Película",
+            "https://archive.org/download/doa_1950/Doa.mp4", false, null),
+        MediaItem("m14", "The Little Shop of Horrors (1960)", "Película",
+            "https://archive.org/download/TheLittleShopOfHorrors_655/TheLittleShopOfHorrors.mp4", false, null),
+        MediaItem("m15", "Carnival of Souls", "Película",
+            "https://archive.org/download/CarnivalOfSouls1962/CarnivalOfSouls.mp4", false, null),
+        MediaItem("m16", "The General (Buster Keaton)", "Película",
+            "https://archive.org/download/TheGeneral1926/TheGeneral.mp4", false, null),
+        MediaItem("m17", "Steamboat Bill Jr.", "Película",
+            "https://archive.org/download/SteamboatBillJr/SteamboatBillJr.mp4", false, null),
+        MediaItem("m18", "Metropolis (1927)", "Película",
+            "https://archive.org/download/Metropolis1927RestoredVersion/Metropolis.mp4", true, null),
+        MediaItem("m19", "Charade (1963)", "Película",
+            "https://archive.org/download/Charade1963/Charade1963.mp4", true, null),
+        MediaItem("m20", "Flower (demo corto)", "Película",
+            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", false, null),
+        MediaItem("m21", "Big Buck Bunny 360p (corto)", "Película",
+            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4", false, null)
     )
 
     fun all() = radios + channels + movies
