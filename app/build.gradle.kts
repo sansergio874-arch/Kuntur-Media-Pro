@@ -11,8 +11,8 @@ android {
         applicationId = "com.kuntur.mediapro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
     }
 
     buildTypes {
@@ -47,17 +47,12 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // Media3 / ExoPlayer robusto
     val media3 = "1.2.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
-    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3")
-    implementation("androidx.media3:media3-datasource-okhttp:$media3")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-common:$media3")
-    implementation("androidx.media3:media3-session:$media3")
 
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.android.gms:play-services-auth:21.0.0")
 }

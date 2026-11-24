@@ -4,50 +4,35 @@ import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
-import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
-import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
 
 /**
- * Fábrica de ExoPlayer optimizada para streaming de radio, TV (HLS/DASH) y VOD.
- * - Reintentos de red
- * - Buffering generoso para redes inestables
- * - User-Agent de navegador (algunas radios lo exigen)
- * - OkHttp con timeouts amplios
+ * Fábrica simple y estable de ExoPlayer.
+ * Evita APIs inestables y dependencias extra que provocaban cierres.
  */
-@UnstableApi
 object StreamPlayerFactory {
 
     private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 KunturMediaPro/1.4"
-
-    private val okHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .build()
-    }
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/1.5"
 
     fun create(context: Context): ExoPlayer {
-        val httpFactory = OkHttpDataSource.Factory(okHttpClient)
-            .setUserAgent(USER_AGENT)
+        return try {
+            createConfigured(context)
+        } catch (_: Throwable) {
+            // Fallback mínimo si la configuración avanzada falla
+            ExoPlayer.Builder(context).build().apply {
+                playWhenReady = true
+                volume = 1f
+            }
+        }
+    }
 
-        // Fallback DefaultHttpDataSource por si OkHttp falla en algún dispositivo
-        val defaultHttp = DefaultHttpDataSource.Factory()
+    private fun createConfigured(context: Context): ExoPlayer {
+        val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
             .setConnectTimeoutMs(20_000)
             .setReadTimeoutMs(30_000)
@@ -57,34 +42,13 @@ object StreamPlayerFactory {
 
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(dataSourceFactory)
-            .setLoadErrorHandlingPolicy(RobustLoadErrorPolicy())
 
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                /* minBufferMs */ 15_000,
-                /* maxBufferMs */ 50_000,
-                /* bufferForPlaybackMs */ 2_500,
-                /* bufferForPlaybackAfterRebufferMs */ 5_000
-            )
-            .setPrioritizeTimeOverSizeThresholds(true)
+            .setBufferDurationsMs(10_000, 40_000, 2_000, 4_000)
             .build()
 
-        val trackSelector = DefaultTrackSelector(context).apply {
-            setParameters(
-                buildUponParameters()
-                    .setMaxVideoSizeSd()
-                    .setPreferredAudioLanguage("es")
-                    .setForceHighestSupportedBitrate(false)
-            )
-        }
-
-        val renderersFactory = DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
-            .setEnableDecoderFallback(true)
-
-        return ExoPlayer.Builder(context, renderersFactory)
+        return ExoPlayer.Builder(context)
             .setMediaSourceFactory(mediaSourceFactory)
-            .setTrackSelector(trackSelector)
             .setLoadControl(loadControl)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
@@ -98,24 +62,6 @@ object StreamPlayerFactory {
             }
     }
 
-    /** Política de reintentos: más intentos y esperas más largas en redes móviles. */
-    private class RobustLoadErrorPolicy : DefaultLoadErrorHandlingPolicy() {
-        override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-            val delay = super.getRetryDelayMsFor(loadErrorInfo)
-            if (delay == C.TIME_UNSET) return C.TIME_UNSET
-            // Reintentos más agresivos (máx ~8 s)
-            return minOf(delay * 2, 8_000L)
-        }
-
-        override fun getMinimumLoadableRetryCount(dataType: Int): Int {
-            return when (dataType) {
-                C.DATA_TYPE_MANIFEST -> 6
-                C.DATA_TYPE_MEDIA -> 8
-                else -> 5
-            }
-        }
-    }
-
     fun humanError(error: PlaybackException?): String {
         if (error == null) return "Error de reproducción"
         return when (error.errorCode) {
@@ -123,7 +69,7 @@ object StreamPlayerFactory {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
                 "Sin conexión o red inestable. Reintente."
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
-                "El servidor rechazó el stream (HTTP)."
+                "El servidor rechazó el stream."
             PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
                 "Stream no encontrado."
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
@@ -131,11 +77,8 @@ object StreamPlayerFactory {
                 "Formato de stream no válido."
             PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
             PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED ->
-                "El dispositivo no puede decodificar este formato."
-            PlaybackException.ERROR_CODE_DRM_SCHEME_UNSUPPORTED,
-            PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED ->
-                "Error de protección DRM."
-            else -> error.message?.take(120) ?: "Error (${error.errorCode})"
+                "No se puede decodificar en este dispositivo."
+            else -> error.message?.take(100) ?: "Error (${error.errorCode})"
         }
     }
 }

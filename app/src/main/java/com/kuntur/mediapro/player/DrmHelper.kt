@@ -6,12 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaItem.DrmConfiguration
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
-import androidx.media3.common.util.UnstableApi
 
-/**
- * Construcción de MediaItem para radio, HLS, DASH, MP4 y DRM Widevine.
- */
-@UnstableApi
 object DrmHelper {
 
     fun createProtectedMediaItem(
@@ -20,24 +15,20 @@ object DrmHelper {
         title: String? = null,
         authToken: String? = null
     ): MediaItem {
-        val drm = DrmConfiguration.Builder(C.WIDEVINE_UUID)
+        val drmBuilder = DrmConfiguration.Builder(C.WIDEVINE_UUID)
             .setLicenseUri(licenseUrl)
             .setForceDefaultLicenseUri(true)
-            .apply {
-                if (!authToken.isNullOrBlank()) {
-                    setLicenseRequestHeaders(mapOf("Authorization" to "Bearer $authToken"))
-                }
-            }
-            .build()
-
+        if (!authToken.isNullOrBlank()) {
+            drmBuilder.setLicenseRequestHeaders(
+                mapOf("Authorization" to "Bearer $authToken")
+            )
+        }
         return MediaItem.Builder()
             .setUri(videoUrl)
             .setMimeType(guessMime(videoUrl))
-            .setDrmConfiguration(drm)
+            .setDrmConfiguration(drmBuilder.build())
             .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title ?: "Kuntur Media Pro")
-                    .build()
+                MediaMetadata.Builder().setTitle(title ?: "Kuntur Media Pro").build()
             )
             .build()
     }
@@ -51,49 +42,38 @@ object DrmHelper {
             .setUri(videoUrl)
             .setMimeType(guessMime(videoUrl))
             .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title ?: "Kuntur Media Pro")
-                    .setIsBrowsable(false)
-                    .build()
+                MediaMetadata.Builder().setTitle(title ?: "Kuntur Media Pro").build()
             )
-
-        // Live / radio: sin clipping; VOD normal
         if (isLive) {
-            builder.setLiveConfiguration(
-                MediaItem.LiveConfiguration.Builder()
-                    .setMaxPlaybackSpeed(1.02f)
-                    .setMinPlaybackSpeed(0.98f)
-                    .build()
-            )
+            try {
+                builder.setLiveConfiguration(
+                    MediaItem.LiveConfiguration.Builder().build()
+                )
+            } catch (_: Throwable) {
+                // ignorar si no está disponible
+            }
         }
-
         return builder.build()
     }
 
-    /** Detecta MIME a partir de la URL para que Media3 elija el extractor correcto. */
     fun guessMime(url: String): String? {
-        val path = Uri.parse(url).path?.lowercase() ?: url.lowercase()
+        val path = (Uri.parse(url).path ?: url).lowercase()
         return when {
-            path.contains(".m3u8") || path.endsWith("m3u8") -> MimeTypes.APPLICATION_M3U8
+            path.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
             path.contains(".mpd") -> MimeTypes.APPLICATION_MPD
-            path.contains(".ism") || path.contains("manifest") && path.contains("ism") ->
-                MimeTypes.APPLICATION_SS
-            path.endsWith(".mp3") || path.contains("mp3") && !path.contains("mp4") ->
-                MimeTypes.AUDIO_MPEG
+            path.endsWith(".mp3") || path.contains("mp3") -> MimeTypes.AUDIO_MPEG
             path.endsWith(".aac") || path.contains("/aac") -> MimeTypes.AUDIO_AAC
             path.endsWith(".mp4") || path.endsWith(".m4a") -> MimeTypes.VIDEO_MP4
             path.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
-            path.endsWith(".ts") -> MimeTypes.VIDEO_MP2T
-            else -> null // Media3 infiere solo
+            else -> null
         }
     }
 
     fun isLikelyLiveOrRadio(url: String, category: String): Boolean {
         val c = category.lowercase()
-        if (c.contains("radio") || c.contains("tv")) return true
+        if (c.contains("radio") || c == "tv") return true
         val u = url.lowercase()
-        return u.contains("stream") || u.contains("live") || u.contains("icy") ||
-            u.contains("icecast") || u.contains("shoutcast") ||
+        return u.contains("stream") || u.contains("live") || u.contains("ice") ||
             (!u.contains(".mp4") && !u.contains(".webm") && !u.contains(".mkv"))
     }
 }
