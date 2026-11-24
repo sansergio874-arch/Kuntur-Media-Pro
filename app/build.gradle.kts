@@ -11,8 +11,8 @@ android {
         applicationId = "com.kuntur.mediapro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.7"
+        versionCode = 9
+        versionName = "1.8"
     }
 
     buildTypes {
@@ -46,6 +46,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // Imágenes / logos
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     val media3 = "1.2.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
