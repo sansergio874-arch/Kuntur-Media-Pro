@@ -46,11 +46,23 @@ object DrmHelper {
             )
         if (isLive) {
             try {
+                // Target offset más alto = más buffer en vivo = menos cortes
                 builder.setLiveConfiguration(
-                    MediaItem.LiveConfiguration.Builder().build()
+                    MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(8_000)
+                        .setMinOffsetMs(3_000)
+                        .setMaxOffsetMs(25_000)
+                        .setMinPlaybackSpeed(0.96f)
+                        .setMaxPlaybackSpeed(1.04f)
+                        .build()
                 )
             } catch (_: Throwable) {
-                // ignorar si no está disponible
+                try {
+                    builder.setLiveConfiguration(
+                        MediaItem.LiveConfiguration.Builder().build()
+                    )
+                } catch (_: Throwable) {
+                }
             }
         }
         return builder.build()
@@ -65,6 +77,7 @@ object DrmHelper {
             path.endsWith(".aac") || path.contains("/aac") -> MimeTypes.AUDIO_AAC
             path.endsWith(".mp4") || path.endsWith(".m4a") -> MimeTypes.VIDEO_MP4
             path.endsWith(".webm") -> MimeTypes.VIDEO_WEBM
+            path.endsWith(".mov") -> MimeTypes.VIDEO_MP4
             else -> null
         }
     }
@@ -74,6 +87,7 @@ object DrmHelper {
         if (c.contains("radio") || c == "tv") return true
         val u = url.lowercase()
         return u.contains("stream") || u.contains("live") || u.contains("ice") ||
-            (!u.contains(".mp4") && !u.contains(".webm") && !u.contains(".mkv"))
+            u.contains(".m3u8") ||
+            (!u.contains(".mp4") && !u.contains(".webm") && !u.contains(".mkv") && !u.contains(".mov"))
     }
 }

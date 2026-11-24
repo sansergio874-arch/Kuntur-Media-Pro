@@ -1,22 +1,28 @@
 package com.kuntur.mediapro.player
 
 import android.content.Context
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
+import java.io.IOException
 
 /**
- * Fábrica estable de ExoPlayer para radio, TV (HLS) y películas (MP4).
+ * ExoPlayer optimizado para menos cortes: buffers amplios, reintentos y wake de red.
  */
 object StreamPlayerFactory {
 
     private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/1.7"
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.6"
 
     fun create(context: Context): ExoPlayer {
         return try {
@@ -32,37 +38,89 @@ object StreamPlayerFactory {
     private fun createConfigured(context: Context): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
-            .setConnectTimeoutMs(25_000)
-            .setReadTimeoutMs(35_000)
+            .setConnectTimeoutMs(30_000)
+            .setReadTimeoutMs(45_000)
             .setAllowCrossProtocolRedirects(true)
+            .setKeepPostFor302Redirects(true)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
+        // Más reintentos ante fallos de red / segmento HLS
+        val errorPolicy: LoadErrorHandlingPolicy = object : DefaultLoadErrorHandlingPolicy(8) {
+            override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                val e = loadErrorInfo.exception
+                if (e is IOException) {
+                    // 1s, 2s, 3s... hasta tope
+                    return (1000L * (loadErrorInfo.errorCount.coerceAtMost(6))).coerceAtMost(8_000L)
+                }
+                return super.getRetryDelayMsFor(loadErrorInfo)
+            }
+
+            override fun getMinimumLoadableRetryCount(dataType: Int): Int {
+                return 8
+            }
+        }
+
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(dataSourceFactory)
+            .setLoadErrorHandlingPolicy(errorPolicy)
 
+        // Buffer amplio para reducir rebuffering (cortes)
+        // minBuffer, maxBuffer, bufferForPlayback, bufferForPlaybackAfterRebuffer
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(8_000, 40_000, 1_500, 3_000)
+            .setBufferDurationsMs(
+                /* minBufferMs */ 25_000,
+                /* maxBufferMs */ 90_000,
+                /* bufferForPlaybackMs */ 3_500,
+                /* bufferForPlaybackAfterRebufferMs */ 8_000
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
-        val builder = ExoPlayer.Builder(context)
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+
+        val liveSpeed = DefaultLivePlaybackSpeedControl.Builder()
+            .setFallbackMaxPlaybackSpeed(1.04f)
+            .setFallbackMinPlaybackSpeed(0.96f)
+            .build()
+
+        val builder = ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
+            .setLivePlaybackSpeedControl(liveSpeed)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
             .setHandleAudioBecomingNoisy(true)
 
-        // WAKE_LOCK ya está en el manifest; si fallara, se omite
         try {
             builder.setWakeMode(C.WAKE_MODE_NETWORK)
         } catch (_: Throwable) {
-            // sin wake mode
         }
 
         return builder.build().apply {
             playWhenReady = true
             repeatMode = Player.REPEAT_MODE_OFF
             volume = 1f
+            try {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .build(),
+                    /* handleAudioFocus = */ true
+                )
+            } catch (_: Throwable) {
+            }
+            // Reduce saltos de calidad bruscos en adaptativo
+            try {
+                trackSelectionParameters = trackSelectionParameters
+                    .buildUpon()
+                    .setForceHighestSupportedBitrate(false)
+                    .build()
+            } catch (_: Throwable) {
+            }
         }
     }
 
@@ -75,7 +133,7 @@ object StreamPlayerFactory {
         return when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-                "Sin conexión o red inestable. Reintente."
+                "Red inestable. Reintente; el buffer se ampliará al cargar."
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
                 "El servidor rechazó el stream."
             PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
