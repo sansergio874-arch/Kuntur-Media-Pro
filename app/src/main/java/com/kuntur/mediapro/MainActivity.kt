@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.OptIn
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -60,19 +58,18 @@ private val NavyMid = Color(0xFF132337)
 private val CardBg = Color(0xFF1A2D45)
 private val Gold = Color(0xFFE8B923)
 
-@OptIn(UnstableApi::class)
 class MainActivity : ComponentActivity() {
     private var player: ExoPlayer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            player = StreamPlayerFactory.create(this)
-        } catch (_: Exception) {
+        player = try {
+            StreamPlayerFactory.create(this)
+        } catch (_: Throwable) {
             try {
-                player = ExoPlayer.Builder(this).build()
-            } catch (_: Exception) {
-                player = null
+                ExoPlayer.Builder(this).build()
+            } catch (_: Throwable) {
+                null
             }
         }
         setContent {
@@ -91,16 +88,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onStop() {
-        super.onStop()
-        // No liberar: permite audio en segundo plano simple al salir de pantalla
-    }
-
     override fun onDestroy() {
         super.onDestroy()
         try {
             player?.release()
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
         }
         player = null
     }
@@ -114,7 +106,6 @@ fun canAccess(context: android.content.Context, item: MediaItem): Boolean {
     return approved && plan != "free"
 }
 
-@OptIn(UnstableApi::class)
 @Composable
 fun AppRoot(player: ExoPlayer) {
     val context = LocalContext.current
@@ -125,6 +116,7 @@ fun AppRoot(player: ExoPlayer) {
     var currentItem by remember { mutableStateOf<MediaItem?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateManager.UpdateInfo?>(null) }
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
+    var playErrorMessage by remember { mutableStateOf<String?>(null) }
     var loginError by remember { mutableStateOf<String?>(null) }
 
     val gso = remember {
@@ -173,7 +165,7 @@ fun AppRoot(player: ExoPlayer) {
     }
 
     LaunchedEffect(Unit) {
-        delay(1500)
+        delay(1400)
         showSplash = false
         try {
             val existing = GoogleSignIn.getLastSignedInAccount(context)
@@ -267,6 +259,46 @@ fun AppRoot(player: ExoPlayer) {
         )
     }
 
+    if (playErrorMessage != null) {
+        AlertDialog(
+            onDismissRequest = { playErrorMessage = null },
+            title = { Text("Error de reproducción") },
+            text = { Text(playErrorMessage!!) },
+            confirmButton = {
+                Button(
+                    onClick = { playErrorMessage = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = Gold)
+                ) { Text("Aceptar", color = Navy) }
+            }
+        )
+    }
+
+    fun startPlayback(item: MediaItem) {
+        if (!canAccess(context, item)) {
+            accessDeniedMessage =
+                "Contenido Premium. Pague por Yape 955238172 y espere aprobación."
+            return
+        }
+        currentItem = item
+        screen = "player"
+        try {
+            val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
+            val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
+                DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!, item.title)
+            } else {
+                DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
+            }
+            player.stop()
+            player.clearMediaItems()
+            player.setMediaItem(mediaItem)
+            player.prepare()
+            player.playWhenReady = true
+            player.play()
+        } catch (e: Exception) {
+            playErrorMessage = e.message?.take(120) ?: "No se pudo iniciar la reproducción."
+        }
+    }
+
     when {
         screen == "player" && currentItem != null -> PlayerScreen(
             item = currentItem!!,
@@ -280,14 +312,10 @@ fun AppRoot(player: ExoPlayer) {
                 screen = "home"
             },
             onRetry = {
+                val item = currentItem ?: return@PlayerScreen
                 try {
-                    val item = currentItem!!
                     val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
-                    val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
-                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!, item.title)
-                    } else {
-                        DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
-                    }
+                    val mediaItem = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
                     player.setMediaItem(mediaItem)
                     player.prepare()
                     player.playWhenReady = true
@@ -308,31 +336,7 @@ fun AppRoot(player: ExoPlayer) {
             }
         )
         else -> HomeScreen(
-            onPlay = { item ->
-                if (!canAccess(context, item)) {
-                    accessDeniedMessage =
-                        "Contenido Premium. Pague por Yape 955238172 y espere aprobación."
-                    return@HomeScreen
-                }
-                try {
-                    currentItem = item
-                    val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
-                    val mediaItem = if (item.isPremium && !item.licenseUrl.isNullOrBlank()) {
-                        DrmHelper.createProtectedMediaItem(item.streamUrl, item.licenseUrl!!, item.title)
-                    } else {
-                        DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
-                    }
-                    player.stop()
-                    player.clearMediaItems()
-                    player.setMediaItem(mediaItem)
-                    player.prepare()
-                    player.playWhenReady = true
-                    player.play()
-                    screen = "player"
-                } catch (_: Exception) {
-                    accessDeniedMessage = "No se pudo reproducir este contenido."
-                }
-            },
+            onPlay = { startPlayback(it) },
             onPlans = { screen = "plans" }
         )
     }
@@ -453,7 +457,7 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
                 shape = RoundedCornerShape(14.dp)
             ) { Text("Planes y Yape 955238172", color = Navy, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.height(22.dp))
-            Text("Radios", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text("Radios (${MediaRepository.radios.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
             Spacer(Modifier.height(10.dp))
         }
         items(MediaRepository.radios, key = { it.id }) { item ->
@@ -461,7 +465,7 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
         }
         item {
             Spacer(Modifier.height(18.dp))
-            Text("Canales TV", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text("Canales TV (${MediaRepository.channels.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
             Spacer(Modifier.height(10.dp))
         }
         items(MediaRepository.channels, key = { it.id }) { item ->
@@ -469,7 +473,7 @@ fun HomeScreen(onPlay: (MediaItem) -> Unit, onPlans: () -> Unit) {
         }
         item {
             Spacer(Modifier.height(18.dp))
-            Text("Películas", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text("Películas (${MediaRepository.movies.size})", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
             Spacer(Modifier.height(10.dp))
         }
         items(MediaRepository.movies, key = { it.id }) { item ->
@@ -526,7 +530,6 @@ fun MediaRow(item: MediaItem, onPlay: (MediaItem) -> Unit) {
     }
 }
 
-@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     item: MediaItem,
@@ -562,11 +565,15 @@ fun PlayerScreen(
             }
         }
         player.addListener(listener)
-        // Estado inicial
         isBuffering = player.playbackState == Player.STATE_BUFFERING ||
             player.playbackState == Player.STATE_IDLE
         isPlaying = player.isPlaying
-        onDispose { player.removeListener(listener) }
+        onDispose {
+            try {
+                player.removeListener(listener)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     Column(
@@ -593,9 +600,7 @@ fun PlayerScreen(
                     PlayerView(ctx).apply {
                         this.player = player
                         useController = true
-                        setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         controllerShowTimeoutMs = 4000
-                        setKeepContentOnPlayerReset(true)
                     }
                 },
                 update = { it.player = player },
@@ -646,12 +651,6 @@ fun PlayerScreen(
             else -> "Pausado"
         }
         Text("$status · ${item.category}", color = Color.White.copy(0.65f), fontSize = 14.sp)
-        Text(
-            "Motor: Media3 ExoPlayer (HLS / DASH / MP3 / MP4)",
-            color = Color.White.copy(0.35f),
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 6.dp)
-        )
     }
 }
 
