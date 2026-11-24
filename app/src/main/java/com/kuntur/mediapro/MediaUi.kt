@@ -28,7 +28,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.kuntur.mediapro.auth.AuthManager
 import com.kuntur.mediapro.billing.PurchaseManager
 import com.kuntur.mediapro.billing.TransactionManager
 import com.kuntur.mediapro.data.MediaItem
@@ -64,14 +63,11 @@ fun MediaRow(item: MediaItem, onPlay: (MediaItem) -> Unit) {
                     fontSize = 12.sp
                 )
             }
-            if (item.isPremium && unlocked) {
-                Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
-            } else if (item.isPremium && !unlocked) {
-                Icon(Icons.Default.Star, null, tint = GoldUi, modifier = Modifier.size(20.dp))
-            } else if (unlocked) {
-                Icon(Icons.Default.PlayArrow, null, tint = GoldUi, modifier = Modifier.size(22.dp))
-            } else {
-                Icon(Icons.Default.Lock, null, tint = GoldUi, modifier = Modifier.size(20.dp))
+            when {
+                item.isPremium && unlocked -> Text("✓", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                item.isPremium -> Icon(Icons.Default.Star, null, tint = GoldUi, modifier = Modifier.size(20.dp))
+                unlocked -> Icon(Icons.Default.PlayArrow, null, tint = GoldUi, modifier = Modifier.size(22.dp))
+                else -> Icon(Icons.Default.Lock, null, tint = GoldUi, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -82,27 +78,42 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
     var isBuffering by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
-                if (playbackState == Player.STATE_READY) { errorMsg = null; isBuffering = false }
+                if (playbackState == Player.STATE_READY) {
+                    errorMsg = null
+                    isBuffering = false
+                }
                 if (playbackState == Player.STATE_ENDED) isPlaying = false
             }
-            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 errorMsg = StreamPlayerFactory.humanError(error)
                 isBuffering = false
             }
         }
         player.addListener(listener)
-        onDispose { try { player.removeListener(listener) } catch (_: Exception) {} }
+        onDispose {
+            try {
+                player.removeListener(listener)
+            } catch (_: Exception) {
+            }
+        }
     }
+
     val sectionLabel = when (item.category.lowercase()) {
         "radio" -> "Reproductor de radio"
         "tv" -> "Reproductor de canales"
         else -> "Reproductor de películas"
     }
+
     Column(Modifier.fillMaxSize().background(NavyUi).padding(16.dp)) {
         TextButton(onClick = onBack) { Text("← Volver", color = GoldUi) }
         Text(sectionLabel, color = GoldUi.copy(0.8f), fontSize = 12.sp)
@@ -116,21 +127,41 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
         }
         Spacer(Modifier.height(16.dp))
         Box(
-            Modifier.fillMaxWidth().height(if (item.category.equals("Radio", true)) 180.dp else 260.dp)
-                .clip(RoundedCornerShape(16.dp)).background(Color.Black),
+            Modifier
+                .fillMaxWidth()
+                .height(if (item.category.equals("Radio", true)) 180.dp else 260.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
             AndroidView(
-                factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true } },
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = player
+                        useController = true
+                    }
+                },
                 update = { it.player = player },
                 modifier = Modifier.fillMaxSize()
             )
-            if (isBuffering && errorMsg == null) CircularProgressIndicator(color = GoldUi)
+            if (isBuffering && errorMsg == null) {
+                CircularProgressIndicator(color = GoldUi)
+            }
             if (errorMsg != null) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(16.dp)
+                ) {
                     Text(errorMsg!!, color = Color(0xFFFF8A80), fontSize = 13.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = { errorMsg = null; isBuffering = true; onRetry() }, colors = ButtonDefaults.buttonColors(containerColor = GoldUi)) {
+                    Button(
+                        onClick = {
+                            errorMsg = null
+                            isBuffering = true
+                            onRetry()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldUi)
+                    ) {
                         Icon(Icons.Default.Refresh, null, tint = NavyUi)
                         Spacer(Modifier.width(8.dp))
                         Text("Reintentar", color = NavyUi)
@@ -150,24 +181,33 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
 }
 
 @Composable
-fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
+fun PlansScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val current = PurchaseManager.getCurrentPlan(context)
     val approved = PurchaseManager.isApproved(context)
-    val owner = AuthManager.isOwner(context)
-    LazyColumn(Modifier.fillMaxSize().background(NavyUi), contentPadding = PaddingValues(18.dp)) {
+
+    LazyColumn(
+        Modifier.fillMaxSize().background(NavyUi),
+        contentPadding = PaddingValues(18.dp)
+    ) {
         item {
             TextButton(onClick = onBack) { Text("← Volver", color = GoldUi) }
             Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("Yape: 955238172", color = GoldUi, fontWeight = FontWeight.SemiBold)
-            if (owner) Text("Modo dueño: todo activo", color = Color(0xFF4CAF50), fontSize = 13.sp)
+            Text(
+                "Pague el plan y envíe el comprobante. La activación es manual.",
+                color = Color.White.copy(0.55f),
+                fontSize = 13.sp
+            )
             Spacer(Modifier.height(16.dp))
         }
         items(PurchaseManager.plans, key = { it.id }) { plan ->
             val selected = current == plan.id
             Card(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBgUi),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (selected) Color(0xFF243B55) else CardBgUi
+                ),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
@@ -181,7 +221,6 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
                         onClick = {
                             PurchaseManager.requestPlan(context, plan.id)
                             TransactionManager.createTransaction(context, plan.id, plan.name, plan.price)
-                            if (owner) PurchaseManager.approve(context)
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = GoldUi),
                         shape = RoundedCornerShape(10.dp)
@@ -191,12 +230,6 @@ fun PlansScreen(onBack: () -> Unit, onLogout: () -> Unit) {
                 }
             }
         }
-        item {
-            Spacer(Modifier.height(24.dp))
-            OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                Text("Cerrar sesión", color = GoldUi)
-            }
-            Spacer(Modifier.height(24.dp))
-        }
+        item { Spacer(Modifier.height(28.dp)) }
     }
 }

@@ -32,9 +32,12 @@ class MainActivity : ComponentActivity() {
             KunturMediaProTheme {
                 Surface(Modifier.fillMaxSize(), color = Color(0xFF0A1628)) {
                     val p = player
-                    if (p != null) AppRoot(p)
-                    else Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Error al iniciar el reproductor", color = Color.White)
+                    if (p != null) {
+                        AppRoot(p)
+                    } else {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Error al iniciar el reproductor", color = Color.White)
+                        }
                     }
                 }
             }
@@ -43,7 +46,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        try { player?.release() } catch (_: Throwable) {}
+        try {
+            player?.release()
+        } catch (_: Throwable) {
+        }
         player = null
     }
 }
