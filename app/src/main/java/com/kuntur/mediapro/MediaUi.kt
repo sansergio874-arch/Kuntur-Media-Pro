@@ -88,11 +88,7 @@ fun MediaRow(
     var isFav by remember(item.id) { mutableStateOf(FavoritesManager.isFavorite(context, item.id)) }
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp)
-            .shadow(4.dp, RoundedCornerShape(14.dp))
-            .clip(RoundedCornerShape(14.dp)),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp).shadow(4.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)),
         colors = CardDefaults.cardColors(containerColor = CardBgUi),
         shape = RoundedCornerShape(14.dp)
     ) {
@@ -105,10 +101,7 @@ fun MediaRow(
                     Text(if (unlocked) item.category else "${item.category} · Bloqueado", color = Color.White.copy(0.45f), fontSize = 12.sp)
                 }
             }
-            IconButton(onClick = {
-                isFav = FavoritesManager.toggle(context, item.id)
-                onFavoriteChanged?.invoke()
-            }) {
+            IconButton(onClick = { isFav = FavoritesManager.toggle(context, item.id); onFavoriteChanged?.invoke() }) {
                 Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favorito", tint = if (isFav) Color(0xFFE53935) else GoldUi)
             }
             IconButton(onClick = { onPlay(item) }) {
@@ -144,7 +137,9 @@ fun PlayerScreen(
     val isRadio = item.category.equals("Radio", ignoreCase = true)
     val isVideo = !isRadio
 
-    LaunchedEffect(currentQuality) { applyQuality(player, currentQuality) }
+    LaunchedEffect(currentQuality) {
+        try { applyQuality(player, currentQuality) } catch (_: Throwable) {}
+    }
 
     DisposableEffect(player) {
         isPlaying = player.isPlaying
@@ -189,9 +184,11 @@ fun PlayerScreen(
                 IconButton(onClick = { isFav = FavoritesManager.toggle(context, item.id); onToggleFavorite() }) {
                     Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favorito", tint = if (isFav) Color(0xFFE53935) else GoldUi)
                 }
+                // Solo botón de pantalla completa en la barra superior (sin tuerca)
                 if (isVideo) {
-                    IconButton(onClick = { showQualityMenu = true }) { Icon(Icons.Default.Settings, contentDescription = "Calidad", tint = GoldUi) }
-                    IconButton(onClick = { isFullscreen = true }) { Icon(Icons.Default.Fullscreen, contentDescription = "Pantalla completa", tint = GoldUi) }
+                    IconButton(onClick = { isFullscreen = true }) {
+                        Icon(Icons.Default.Fullscreen, contentDescription = "Pantalla completa", tint = GoldUi)
+                    }
                 }
             }
         }
@@ -211,6 +208,8 @@ fun PlayerScreen(
                         controllerShowTimeoutMs = 3500
                         setShowNextButton(false)
                         setShowPreviousButton(false)
+                        // Ocultar el botón de ajustes nativo de ExoPlayer (tuerca inferior)
+                        try { setShowSubtitleButton(false) } catch (_: Throwable) {}
                     }
                 },
                 update = { view ->
@@ -231,8 +230,9 @@ fun PlayerScreen(
 
             if (isFullscreen) {
                 Row(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                    IconButton(onClick = { showQualityMenu = true }) { Icon(Icons.Default.Settings, null, tint = GoldUi) }
-                    IconButton(onClick = { isFullscreen = false }) { Icon(Icons.Default.FullscreenExit, null, tint = GoldUi) }
+                    IconButton(onClick = { isFullscreen = false }) {
+                        Icon(Icons.Default.FullscreenExit, null, tint = GoldUi)
+                    }
                 }
             }
 
@@ -263,7 +263,13 @@ fun PlayerScreen(
                     else -> "Pausado"
                 }
                 Text(status, color = Color.White.copy(0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f))
-                if (isVideo) Text(currentQuality.label, color = GoldUi, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                // Única tuerca: abajo, junto al estado
+                if (isVideo) {
+                    IconButton(onClick = { showQualityMenu = true }) {
+                        Icon(Icons.Default.Settings, contentDescription = "Calidad", tint = GoldUi)
+                    }
+                    Text(currentQuality.label, color = GoldUi, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
             if (isRadio) {
                 Text("Puede minimizar la app: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
@@ -281,8 +287,8 @@ fun PlayerScreen(
             text = {
                 Column {
                     VideoQuality.entries.forEach { q ->
-                        Row(Modifier.fillMaxWidth().clickable { currentQuality = q; applyQuality(player, q); showQualityMenu = false }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = currentQuality == q, onClick = { currentQuality = q; applyQuality(player, q); showQualityMenu = false }, colors = RadioButtonDefaults.colors(selectedColor = GoldUi))
+                        Row(Modifier.fillMaxWidth().clickable { currentQuality = q; try { applyQuality(player, q) } catch (_: Throwable) {}; showQualityMenu = false }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = currentQuality == q, onClick = { currentQuality = q; try { applyQuality(player, q) } catch (_: Throwable) {}; showQualityMenu = false }, colors = RadioButtonDefaults.colors(selectedColor = GoldUi))
                             Spacer(Modifier.width(8.dp))
                             Column {
                                 Text(q.label, color = Color.White, fontWeight = FontWeight.Medium)
