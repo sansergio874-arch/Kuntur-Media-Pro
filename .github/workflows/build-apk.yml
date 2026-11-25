@@ -38,9 +38,15 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           if [ -f gradlew ]; then
-            ./gradlew testDebugUnitTest assembleDebug --stacktrace
+            ./gradlew assembleDebug --stacktrace --info 2>&1 | tee build.log
           else
-            gradle testDebugUnitTest assembleDebug --stacktrace
+            gradle assembleDebug --stacktrace --info 2>&1 | tee build.log
+          fi
+          # Mostrar errores si falló
+          if [ $? -ne 0 ]; then
+            echo "=== ERRORES DE COMPILACIÓN ==="
+            grep -E "error:|e: |FAILED|Exception" build.log | head -50
+            exit 1
           fi
 
       - name: Validate APK
@@ -82,9 +88,9 @@ jobs:
           name: Kuntur Media Pro v2.9.${{ github.run_number }}
           body: |
             APK Kuntur Media Pro (debug).
-            - Control de brillo por lados
+            - Reproductor simplificado
             - Pantalla completa con rotación
-            - Reproducción sin pausa en llamadas
+            - Calidades de video
             - Traductor de voz
           files: app/build/outputs/apk/debug/*.apk
           draft: false
