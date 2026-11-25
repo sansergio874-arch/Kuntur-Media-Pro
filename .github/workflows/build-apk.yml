@@ -47,16 +47,33 @@ jobs:
             gradle testDebugUnitTest assembleDebug --stacktrace
           fi
 
-      - name: Verify APK is valid
+      - name: Validate APK
         run: |
+          set -euo pipefail
           APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
-          echo "APK path: $APK"
+          echo "=== Validando APK: $APK ==="
           ls -lh "$APK"
-          # Verificar que es un ZIP válido (APK = ZIP)
-          unzip -t "$APK" > /dev/null || { echo "ERROR: APK no es un ZIP válido"; exit 1; }
-          # Verificar que contiene AndroidManifest.xml
-          unzip -l "$APK" | grep -q AndroidManifest.xml || { echo "ERROR: APK no contiene AndroidManifest.xml"; exit 1; }
-          echo "APK verificado correctamente"
+
+          # 1. Tamaño mínimo (evita APK vacíos o truncados)
+          SIZE=$(stat -c%s "$APK")
+          echo "Tamaño: $SIZE bytes"
+          if [ "$SIZE" -lt 500000 ]; then
+            echo "ERROR: APK demasiado pequeño (< 500 KB). Probable fallo de compilación."
+            exit 1
+          fi
+
+          # 2. Debe ser un ZIP válido
+          unzip -t "$APK" > /dev/null || { echo "ERROR: No es un archivo ZIP válido"; exit 1; }
+
+          # 3. Contenido esencial de un APK
+          LIST=$(unzip -l "$APK")
+          echo "$LIST" | grep -q "AndroidManifest.xml" || { echo "ERROR: Falta AndroidManifest.xml"; exit 1; }
+          echo "$LIST" | grep -q "classes.dex" || { echo "ERROR: Falta classes.dex"; exit 1; }
+          echo "$LIST" | grep -q "resources.arsc" || { echo "ERROR: Falta resources.arsc"; exit 1; }
+
+          # 4. Resumen
+          echo "=== APK válido ==="
+          echo "$LIST" | head -30
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
