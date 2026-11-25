@@ -25,7 +25,6 @@ object M3uPlaylistParser {
                                 title = streamTitle.take(100),
                                 category = "TV",
                                 streamUrl = normalizedUrl,
-                                isPremium = false,
                                 logoUrl = logo?.takeIf { it.startsWith("https://", true) }
                             ))
                         }
