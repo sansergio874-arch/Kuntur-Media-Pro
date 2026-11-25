@@ -51,7 +51,7 @@ fun LogoImage(
             SubcomposeAsyncImage(
                 model = logoUrl,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier.size(size).clip(shape),
                 loading = {
                     Icon(Icons.Default.PlayArrow, null, tint = Gold.copy(0.5f))
