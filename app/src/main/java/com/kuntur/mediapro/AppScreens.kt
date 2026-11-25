@@ -138,17 +138,6 @@ fun AppRoot(player: ExoPlayer) {
                         "tv" -> AppSection.CHANNELS
                         else -> AppSection.MOVIES
                     }
-                },
-                onRetry = {
-                    val item = currentItem ?: return@PlayerScreen
-                    try {
-                        val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
-                        player.setMediaItem(DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live))
-                        player.prepare()
-                        player.playWhenReady = true
-                        player.play()
-                    } catch (_: Exception) {
-                    }
                 }
             )
         } else {

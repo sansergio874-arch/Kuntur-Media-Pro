@@ -7,6 +7,4 @@ object GoogleAuthConfig {
 
     const val ALT_CLIENT_ID =
         "891239728708-98vtd61oibbpuke3lcgsnmqivma9vsda.apps.googleusercontent.com"
-
-    const val OWNER_EMAIL = "santacruztapullimas@gmail.com"
 }

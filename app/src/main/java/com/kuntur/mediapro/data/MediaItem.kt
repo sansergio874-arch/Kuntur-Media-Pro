@@ -50,17 +50,6 @@ object MediaRepository {
             "https://cdnhd.iblups.com/hls/ee2450c81e554f4cae0e6292106993c2.m3u8", false, null),
         MediaItem("c4", "Canal IPe", "TV",
             "https://cdnhd.iblups.com/hls/3f2cb1658d114f2693eff18d83199e67.m3u8", false, null),
-        MediaItem("c5", "Mux Demo HLS", "TV",
-            "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", false,
-            "https://www.mux.com/images/mux-logo-black.png"),
-        MediaItem("c6", "Apple BipBop", "TV",
-            "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8",
-            false, null),
-        MediaItem("c7", "Akamai HLS Live", "TV",
-            "https://cph-p2p-msl.akamaized.net/hls/live/2000341/test/master.m3u8", false, null),
-        MediaItem("c8", "Mux Test 001", "TV",
-            "https://test-streams.mux.dev/test_001/stream.m3u8", true,
-            "https://www.mux.com/images/mux-logo-black.png")
     )
 
     val movies = listOf(

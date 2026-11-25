@@ -2,11 +2,15 @@ name: Build and Release APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'repair/**' ]
   workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -30,7 +34,7 @@ jobs:
           if [ -f gradlew ]; then chmod +x gradlew; fi
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -43,9 +47,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success() && github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Kuntur Media Pro v1.0.${{ github.run_number }}
-          body: APK generado automáticamente. Instale en su dispositivo Android.
+          tag_name: v2.7.${{ github.run_number }}
+          name: Kuntur Media Pro v2.7.${{ github.run_number }}
+          body: APK Kuntur Media Pro generado y compilado automáticamente por GitHub Actions.
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
