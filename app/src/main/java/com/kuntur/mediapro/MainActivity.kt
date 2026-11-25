@@ -33,15 +33,21 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        requestNotificationPermissionIfNeeded()
+        try {
+            requestNotificationPermissionIfNeeded()
+        } catch (_: Throwable) {}
 
-        // El player se crea aquí; el servicio de segundo plano se inicia al reproducir.
-        val existing = PlayerHolder.player
+        // Crear player de forma segura
+        val existing = try { PlayerHolder.player } catch (_: Throwable) { null }
         playerState = existing ?: try {
-            StreamPlayerFactory.create(applicationContext).also { PlayerHolder.attach(it) }
+            StreamPlayerFactory.create(applicationContext).also {
+                try { PlayerHolder.attach(it) } catch (_: Throwable) {}
+            }
         } catch (_: Throwable) {
             try {
-                ExoPlayer.Builder(applicationContext).build().also { PlayerHolder.attach(it) }
+                ExoPlayer.Builder(applicationContext).build().also {
+                    try { PlayerHolder.attach(it) } catch (_: Throwable) {}
+                }
             } catch (_: Throwable) {
                 null
             }
@@ -50,9 +56,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             KunturMediaProTheme {
                 Surface(Modifier.fillMaxSize(), color = Color(0xFF0A1628)) {
-                    val p = playerState ?: PlayerHolder.player
+                    val p = playerState ?: try { PlayerHolder.player } catch (_: Throwable) { null }
                     if (p != null) {
-                        AppRoot(p)
+                        try {
+                            AppRoot(p)
+                        } catch (e: Throwable) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("Error al cargar la interfaz", color = Color.White)
+                            }
+                        }
                     } else {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Error al iniciar el reproductor", color = Color.White)
@@ -65,12 +77,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        PlayerHolder.player?.let { playerState = it }
+        try {
+            PlayerHolder.player?.let { playerState = it }
+        } catch (_: Throwable) {}
     }
 
     override fun onDestroy() {
-        // No liberar el ExoPlayer si sigue reproduciendo en segundo plano.
-        // Se libera cuando el usuario detiene la reproducción o el sistema destruye el servicio.
         super.onDestroy()
     }
 
