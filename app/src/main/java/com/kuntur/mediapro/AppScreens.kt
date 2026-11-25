@@ -1,5 +1,6 @@
 package com.kuntur.mediapro
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,14 +31,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.exoplayer.ExoPlayer
+import com.kuntur.mediapro.billing.BillingConfig
 import com.kuntur.mediapro.billing.PurchaseManager
 import com.kuntur.mediapro.data.FavoritesManager
+import com.kuntur.mediapro.data.M3uPlaylistParser
 import com.kuntur.mediapro.data.MediaItem
-import com.kuntur.mediapro.data.MediaRepository
+import com.kuntur.mediapro.data.PlaylistCatalog
 import com.kuntur.mediapro.player.DrmHelper
 import com.kuntur.mediapro.player.PlayerHolder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 
 private val NavyS = Color(0xFF0A1628)
 private val NavyMidS = Color(0xFF132337)
@@ -46,12 +57,13 @@ private val GoldS = Color(0xFFE8B923)
 
 enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES }
 
-fun canAccess(context: android.content.Context, item: MediaItem): Boolean =
+fun canAccess(context: Context, item: MediaItem): Boolean =
     PurchaseManager.canAccess(context, item)
 
 @Composable
 fun AppRoot(player: ExoPlayer) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var showSplash by remember { mutableStateOf(true) }
     var section by remember { mutableStateOf(AppSection.HOME) }
     var currentItem by remember { mutableStateOf<MediaItem?>(null) }
@@ -59,26 +71,108 @@ fun AppRoot(player: ExoPlayer) {
     var playErrorMessage by remember { mutableStateOf<String?>(null) }
     var browseInitialPage by remember { mutableIntStateOf(0) }
 
+    var showPlaylistDialog by remember { mutableStateOf(false) }
+    var playlistUrl by remember { mutableStateOf("") }
+    var playlistMessage by remember { mutableStateOf<String?>(null) }
+    var importingPlaylist by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
-        delay(1200)
+        delay(1000)
         showSplash = false
+    }
+
+    // Restaurar listas M3U guardadas y clasificar
+    LaunchedEffect(Unit) {
+        val sources = PlaylistCatalog.savedSources(context)
+        sources.forEach { source ->
+            try {
+                val imported = loadPlaylist(source)
+                PlaylistCatalog.importItems(imported)
+                yield()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     if (showSplash) {
         Box(
-            Modifier
-                .fillMaxSize()
-                .background(Brush.verticalGradient(listOf(NavyS, NavyMidS))),
+            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS))),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("K", color = GoldS, fontSize = 52.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(12.dp))
                 Text("Kuntur Media Pro", color = GoldS, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text("Radio · TV · Películas", color = Color.White.copy(0.65f), fontSize = 14.sp)
+                Text("TV · IPTV · Radios · Películas", color = Color.White.copy(0.65f), fontSize = 14.sp)
             }
         }
         return
+    }
+
+    if (showPlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!importingPlaylist) showPlaylistDialog = false },
+            title = { Text("Agregar lista IPTV (M3U)") },
+            text = {
+                Column {
+                    Text(
+                        "Pegue la URL HTTPS de su lista M3U/M3U8 autorizada. " +
+                            "Las entradas se ordenarán automáticamente: radios, canales o películas.",
+                        fontSize = 13.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = playlistUrl,
+                        onValueChange = { playlistUrl = it },
+                        singleLine = true,
+                        label = { Text("URL de lista M3U") },
+                        placeholder = { Text("https://servidor/lista.m3u") },
+                        enabled = !importingPlaylist
+                    )
+                    playlistMessage?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            it,
+                            color = if (it.startsWith("Lista")) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !importingPlaylist && playlistUrl.startsWith("https://", true),
+                    onClick = {
+                        importingPlaylist = true
+                        playlistMessage = null
+                        scope.launch {
+                            try {
+                                val imported = loadPlaylist(playlistUrl.trim())
+                                PlaylistCatalog.saveSource(context, playlistUrl.trim())
+                                val (r, c, m) = PlaylistCatalog.importItems(imported)
+                                val total = r + c + m
+                                playlistMessage = if (total == 0) {
+                                    "No se encontraron entradas nuevas."
+                                } else {
+                                    "Lista importada: $r radios · $c canales · $m películas."
+                                }
+                            } catch (error: Exception) {
+                                playlistMessage =
+                                    "No se pudo importar: ${error.message?.take(110) ?: "revise la URL"}"
+                            } finally {
+                                importingPlaylist = false
+                            }
+                        }
+                    }
+                ) {
+                    if (importingPlaylist) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text("Importar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { if (!importingPlaylist) showPlaylistDialog = false }) { Text("Cerrar") }
+            }
+        )
     }
 
     if (accessDeniedMessage != null) {
@@ -115,7 +209,7 @@ fun AppRoot(player: ExoPlayer) {
     fun startPlayback(item: MediaItem) {
         if (!canAccess(context, item)) {
             accessDeniedMessage =
-                "Contenido Premium. Elija un plan, pague por Yape ${com.kuntur.mediapro.billing.BillingConfig.YAPE_NUMBER} indicando su código y espere la activación."
+                "Contenido Premium. Elija un plan, pague por Yape ${BillingConfig.YAPE_NUMBER} e indique su código."
             return
         }
         currentItem = item
@@ -150,9 +244,7 @@ fun AppRoot(player: ExoPlayer) {
                     }
                     section = AppSection.BROWSE
                 },
-                onToggleFavorite = {
-                    FavoritesManager.toggle(context, item.id)
-                }
+                onToggleFavorite = { FavoritesManager.toggle(context, item.id) }
             )
         } else {
             section = AppSection.HOME
@@ -173,6 +265,9 @@ fun AppRoot(player: ExoPlayer) {
         )
 
         AppSection.HOME -> HomeHub(
+            radioCount = PlaylistCatalog.radios.size,
+            channelCount = PlaylistCatalog.channels.size,
+            movieCount = PlaylistCatalog.movies.size,
             onRadios = {
                 browseInitialPage = 0
                 section = AppSection.BROWSE
@@ -186,18 +281,27 @@ fun AppRoot(player: ExoPlayer) {
                 section = AppSection.BROWSE
             },
             onFavorites = { section = AppSection.FAVORITES },
-            onPlans = { section = AppSection.PLANS }
+            onPlans = { section = AppSection.PLANS },
+            onAddPlaylist = {
+                playlistUrl = ""
+                playlistMessage = null
+                showPlaylistDialog = true
+            }
         )
     }
 }
 
 @Composable
 fun HomeHub(
+    radioCount: Int,
+    channelCount: Int,
+    movieCount: Int,
     onRadios: () -> Unit,
     onChannels: () -> Unit,
     onMovies: () -> Unit,
     onFavorites: () -> Unit,
-    onPlans: () -> Unit
+    onPlans: () -> Unit,
+    onAddPlaylist: () -> Unit
 ) {
     Column(
         Modifier
@@ -206,24 +310,49 @@ fun HomeHub(
             .padding(20.dp)
     ) {
         Text("Kuntur Media Pro", color = GoldS, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Text("Elija una sección · Deslice entre categorías", color = Color.White.copy(0.6f), fontSize = 14.sp)
+        Text("Tu entretenimiento en un solo lugar", color = Color.White.copy(0.6f), fontSize = 14.sp)
         Spacer(Modifier.height(24.dp))
-        SectionCard("Radios", "Solo emisoras · ${MediaRepository.radios.size}", Icons.Default.Radio, onRadios)
+
+        SectionCard("TV en vivo e IPTV", "$channelCount canales + tus listas M3U", Icons.Default.Tv, onChannels)
         Spacer(Modifier.height(12.dp))
-        SectionCard("Canales TV", "Solo canales · ${MediaRepository.channels.size}", Icons.Default.Tv, onChannels)
+        SectionCard("Radios", "$radioCount emisoras en directo", Icons.Default.Radio, onRadios)
         Spacer(Modifier.height(12.dp))
-        SectionCard("Películas", "Solo películas · ${MediaRepository.movies.size}", Icons.Default.Movie, onMovies)
+        SectionCard("Películas", "$movieCount títulos", Icons.Default.Movie, onMovies)
         Spacer(Modifier.height(12.dp))
         SectionCard("Favoritos", "Sus contenidos guardados", Icons.Default.Favorite, onFavorites)
-        Spacer(Modifier.weight(1f))
+
+        // Botón en la zona marcada del Inicio
+        Spacer(Modifier.height(20.dp))
         Button(
-            onClick = onPlans,
-            modifier = Modifier.fillMaxWidth().height(50.dp),
+            onClick = onAddPlaylist,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = GoldS),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Text("Planes y Yape", color = NavyS, fontWeight = FontWeight.Bold)
+            Text("+ Agregar lista IPTV (M3U)", color = NavyS, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
+        Text(
+            "Al importar, se ordenan solos: radios · canales · películas",
+            color = Color.White.copy(0.45f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = onPlans,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CardBgS),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Text("Planes Premium y Yape", color = GoldS, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            "Utiliza fuentes propias o autorizadas.",
+            color = Color.White.copy(0.4f),
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
     }
 }
 
@@ -258,9 +387,9 @@ fun BrowsePagerScreen(
     onPlans: () -> Unit
 ) {
     val pages = listOf(
-        Triple("Radios", Icons.Default.Radio, MediaRepository.radios),
-        Triple("Canales TV", Icons.Default.Tv, MediaRepository.channels),
-        Triple("Películas", Icons.Default.Movie, MediaRepository.movies)
+        Triple("Radios", Icons.Default.Radio, PlaylistCatalog.radios.toList()),
+        Triple("Canales TV", Icons.Default.Tv, PlaylistCatalog.channels.toList()),
+        Triple("Películas", Icons.Default.Movie, PlaylistCatalog.movies.toList())
     )
     val pagerState = rememberPagerState(
         initialPage = initialPage.coerceIn(0, pages.lastIndex),
@@ -275,9 +404,7 @@ fun BrowsePagerScreen(
             .background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
     ) {
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TextButton(onClick = onBack) {
@@ -294,9 +421,7 @@ fun BrowsePagerScreen(
         }
 
         Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             pages.forEachIndexed { index, (title, icon, _) ->
@@ -318,19 +443,10 @@ fun BrowsePagerScreen(
             }
         }
 
-        Text(
-            "Deslice horizontalmente para cambiar de sección",
-            color = Color.White.copy(0.45f),
-            fontSize = 11.sp,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-        )
-
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = { Text("Buscar…", color = Color.White.copy(0.4f)) },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = GoldS) },
             singleLine = true,
@@ -346,10 +462,7 @@ fun BrowsePagerScreen(
             shape = RoundedCornerShape(12.dp)
         )
 
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxSize()
-        ) { page ->
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             val (title, icon, items) = pages[page]
             val filtered = if (query.isBlank()) items else items.filter {
                 it.title.contains(query, ignoreCase = true)
@@ -390,11 +503,7 @@ fun CategoryListContent(
         }
         if (items.isEmpty()) {
             item {
-                Text(
-                    "No hay resultados",
-                    color = Color.White.copy(0.5f),
-                    modifier = Modifier.padding(24.dp)
-                )
+                Text("No hay resultados", color = Color.White.copy(0.5f), modifier = Modifier.padding(24.dp))
             }
         } else {
             items(items, key = { it.id }) { MediaRow(it, onPlay) }
@@ -404,20 +513,18 @@ fun CategoryListContent(
 }
 
 @Composable
-fun FavoritesScreen(
-    onPlay: (MediaItem) -> Unit,
-    onBack: () -> Unit
-) {
+fun FavoritesScreen(onPlay: (MediaItem) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var refresh by remember { mutableIntStateOf(0) }
-    val favorites = remember(refresh) {
-        FavoritesManager.favoritesFrom(context, MediaRepository.all())
+    val all = remember(refresh, PlaylistCatalog.radios.size, PlaylistCatalog.channels.size, PlaylistCatalog.movies.size) {
+        PlaylistCatalog.radios + PlaylistCatalog.channels + PlaylistCatalog.movies
+    }
+    val favorites = remember(refresh, all) {
+        FavoritesManager.favoritesFrom(context, all)
     }
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
     ) {
         TextButton(onClick = onBack, modifier = Modifier.padding(8.dp)) {
             Icon(Icons.Default.Home, null, tint = GoldS, modifier = Modifier.size(18.dp))
@@ -426,20 +533,14 @@ fun FavoritesScreen(
         }
         LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Favorite, null, tint = GoldS, modifier = Modifier.size(26.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Column {
-                        Text("Favoritos", color = GoldS, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                        Text("${favorites.size} guardados", color = Color.White.copy(0.5f), fontSize = 13.sp)
-                    }
-                }
+                Text("Favoritos", color = GoldS, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${favorites.size} guardados", color = Color.White.copy(0.5f), fontSize = 13.sp)
                 Spacer(Modifier.height(16.dp))
             }
             if (favorites.isEmpty()) {
                 item {
                     Text(
-                        "Aún no tiene favoritos.\nToque el corazón en cualquier título para guardar.",
+                        "Aún no tiene favoritos.",
                         color = Color.White.copy(0.55f),
                         modifier = Modifier.padding(16.dp)
                     )
@@ -449,7 +550,59 @@ fun FavoritesScreen(
                     MediaRow(item, onPlay, onFavoriteChanged = { refresh++ })
                 }
             }
-            item { Spacer(Modifier.height(28.dp)) }
         }
+    }
+}
+
+private class LimitedPlaylistInputStream(
+    input: InputStream,
+    private val maxBytes: Long
+) : FilterInputStream(input) {
+    private var bytesRead = 0L
+
+    override fun read(): Int {
+        val value = super.read()
+        if (value >= 0) countBytes(1)
+        return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val count = super.read(buffer, offset, length)
+        if (count > 0) countBytes(count)
+        return count
+    }
+
+    private fun countBytes(count: Int) {
+        bytesRead += count
+        require(bytesRead <= maxBytes) { "La lista supera el límite de 256 MB." }
+    }
+}
+
+private suspend fun loadPlaylist(sourceUrl: String): List<MediaItem> = withContext(Dispatchers.IO) {
+    require(sourceUrl.startsWith("https://", ignoreCase = true)) { "La URL debe usar HTTPS." }
+    val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 20000
+        readTimeout = 30000
+        instanceFollowRedirects = true
+        requestMethod = "GET"
+        setRequestProperty("User-Agent", "KunturMediaPro/2.9")
+        setRequestProperty("Accept", "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*")
+    }
+    try {
+        require(connection.responseCode in 200..299) {
+            "El servidor respondió HTTP ${connection.responseCode}."
+        }
+        val maxBytes = 256L * 1024L * 1024L
+        require(connection.contentLengthLong <= 0L || connection.contentLengthLong <= maxBytes) {
+            "La lista supera el límite de 256 MB."
+        }
+        connection.inputStream.use { input ->
+            val limited = LimitedPlaylistInputStream(input, maxBytes)
+            InputStreamReader(limited, Charsets.UTF_8).buffered().use { reader ->
+                M3uPlaylistParser.parse(reader)
+            }
+        }
+    } finally {
+        connection.disconnect()
     }
 }
