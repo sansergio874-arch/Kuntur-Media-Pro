@@ -31,6 +31,11 @@ import com.kuntur.mediapro.player.DrmHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
+import java.io.FilterInputStream
+import java.io.InputStream
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
 import java.net.URL
 
 private val NavyS = Color(0xFF0A1628)
@@ -101,29 +106,39 @@ fun AppRoot(player: ExoPlayer) {
                         scope.launch {
                             try {
                                 val imported = withContext(Dispatchers.IO) {
-                                    val connection = URL(playlistUrl.trim()).openConnection().apply {
-                                        connectTimeout = 12000
-                                        readTimeout = 15000
-                                        setRequestProperty("User-Agent", "KunturMediaPro/2.8")
+                                    val connection = (URL(playlistUrl.trim()).openConnection() as HttpURLConnection).apply {
+                                        connectTimeout = 20000
+                                        readTimeout = 30000
+                                        instanceFollowRedirects = true
+                                        requestMethod = "GET"
+                                        setRequestProperty("User-Agent", "KunturMediaPro/2.9")
+                                        setRequestProperty("Accept", "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*")
                                     }
-                                    val bytes = connection.getInputStream().use { input ->
-                                        val output = java.io.ByteArrayOutputStream()
-                                        val buffer = ByteArray(8192)
-                                        var total = 0
-                                        while (true) {
-                                            val count = input.read(buffer)
-                                            if (count < 0) break
-                                            total += count
-                                            require(total <= 5 * 1024 * 1024) { "La lista supera el límite de 5 MB." }
-                                            output.write(buffer, 0, count)
+                                    try {
+                                        require(connection.responseCode in 200..299) {
+                                            "El servidor respondió HTTP ${connection.responseCode}."
                                         }
-                                        output.toByteArray()
+                                        val maxBytes = 256L * 1024L * 1024L
+                                        require(connection.contentLengthLong <= 0L || connection.contentLengthLong <= maxBytes) {
+                                            "La lista supera el límite de 256 MB."
+                                        }
+                                        connection.inputStream.use { input ->
+                                            val limited = LimitedPlaylistInputStream(input, maxBytes)
+                                            InputStreamReader(limited, Charsets.UTF_8).buffered().use { reader ->
+                                                M3uPlaylistParser.parse(reader)
+                                            }
+                                        }
+                                    } finally {
+                                        connection.disconnect()
                                     }
-                                    M3uPlaylistParser.parse(String(bytes, Charsets.UTF_8))
                                 }
-                                val existing = channels.map { it.streamUrl }.toSet()
-                                val fresh = imported.filterNot { it.streamUrl in existing }
-                                channels.addAll(fresh)
+                                val existing = channels.mapTo(HashSet()) { it.streamUrl }
+                                val fresh = imported.filter { existing.add(it.streamUrl) }
+                                // Insertar en grupos pequeños para que Compose pueda dibujar y responder entre lotes.
+                                fresh.chunked(200).forEach { batch ->
+                                    channels.addAll(batch)
+                                    yield()
+                                }
                                 playlistMessage = if (fresh.isEmpty()) "No se encontraron canales nuevos en la lista." else "Lista importada: ${fresh.size} canales nuevos."
                             } catch (error: Exception) {
                                 playlistMessage = "No se pudo importar: ${error.message?.take(110) ?: "revisa la URL y el formato M3U"}"
@@ -293,5 +308,31 @@ fun CategoryScreen(
             items(items, key = { it.id }) { MediaRow(it, onPlay) }
             item { Spacer(Modifier.height(28.dp)) }
         }
+    }
+}
+
+
+/** Cuenta bytes reales durante la descarga y corta respuestas sin Content-Length fiable. */
+private class LimitedPlaylistInputStream(
+    input: InputStream,
+    private val maxBytes: Long
+) : FilterInputStream(input) {
+    private var bytesRead = 0L
+
+    override fun read(): Int {
+        val value = super.read()
+        if (value >= 0) countBytes(1)
+        return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val count = super.read(buffer, offset, length)
+        if (count > 0) countBytes(count)
+        return count
+    }
+
+    private fun countBytes(count: Int) {
+        bytesRead += count
+        require(bytesRead <= maxBytes) { "La lista supera el límite de 256 MB." }
     }
 }
