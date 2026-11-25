@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.coerceAtLeast(27) ?: 27
-        versionName = "2.7.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        versionName = "2.8.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     buildTypes {
@@ -56,4 +56,5 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-common:$media3")
+    implementation("androidx.media3:media3-session:$media3")
 }
