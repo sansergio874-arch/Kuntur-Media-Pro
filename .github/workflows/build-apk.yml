@@ -29,15 +29,34 @@ jobs:
         with:
           gradle-version: '8.4'
 
-      - name: Make gradlew executable if present
+      - name: Generate Gradle Wrapper if missing
         run: |
-          if [ -f gradlew ]; then chmod +x gradlew; fi
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.4
+            chmod +x gradlew
+          fi
 
       - name: Build Debug APK
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: gradle testDebugUnitTest assembleDebug --stacktrace
+        run: |
+          if [ -f gradlew ]; then
+            ./gradlew testDebugUnitTest assembleDebug --stacktrace
+          else
+            gradle testDebugUnitTest assembleDebug --stacktrace
+          fi
+
+      - name: Verify APK is valid
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK path: $APK"
+          ls -lh "$APK"
+          # Verificar que es un ZIP válido (APK = ZIP)
+          unzip -t "$APK" > /dev/null || { echo "ERROR: APK no es un ZIP válido"; exit 1; }
+          # Verificar que contiene AndroidManifest.xml
+          unzip -l "$APK" | grep -q AndroidManifest.xml || { echo "ERROR: APK no contiene AndroidManifest.xml"; exit 1; }
+          echo "APK verificado correctamente"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -52,7 +71,12 @@ jobs:
         with:
           tag_name: v2.9.${{ github.run_number }}
           name: Kuntur Media Pro v2.9.${{ github.run_number }}
-          body: APK Kuntur Media Pro con pagos/activación y reproducción en segundo plano.
+          body: |
+            APK Kuntur Media Pro (debug).
+            - Pantalla de inicio (Splash)
+            - Menú lateral con Configuraciones
+            - Importación de listas M3U con clasificación automática
+            - Reproducción en segundo plano
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
