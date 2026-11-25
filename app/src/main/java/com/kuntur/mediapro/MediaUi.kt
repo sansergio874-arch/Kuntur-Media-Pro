@@ -2,7 +2,6 @@ package com.kuntur.mediapro
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
-import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -55,6 +54,7 @@ import com.kuntur.mediapro.ui.LogoImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 private val NavyUi = Color(0xFF0A1628)
 private val CardBgUi = Color(0xFF1A2D45)
@@ -250,42 +250,23 @@ fun PlayerScreen(
                     .fillMaxSize()
                     .pointerInput(item.id) { detectTransformGestures { _, _, zoom, _ -> videoScale = (videoScale * zoom).coerceIn(1f, 3f) } }
                     .pointerInput(isFullscreen) {
-                        detectDragGestures(
-                            onDrag = { change, dragAmount ->
-                                // Solo dos dedos y no desde el borde superior (evitar notificaciones)
-                                if (change.previousPressed && change.pressed) {
-                                    val pointerCount = 2 // detectDragGestures es por puntero; usamos posición
-                                    val y = change.position.y
-                                    val x = change.position.x
-                                    val width = size.width.toFloat()
-                                    // Ignorar zona superior (primeros 80px) para no interferir con notificaciones
-                                    if (y > 80f && kotlin.math.abs(dragAmount.y) > 8f) {
-                                        if (x < width / 2f) {
-                                            // Lado izquierdo: bajar brillo al deslizar hacia abajo
-                                            if (dragAmount.y > 0) {
-                                                adjustBrightness(activity, -0.03f)
-                                                brightnessLabel = "Brillo −"
-                                            } else {
-                                                adjustBrightness(activity, 0.03f)
-                                                brightnessLabel = "Brillo +"
-                                            }
-                                        } else {
-                                            // Lado derecho: subir brillo al deslizar hacia arriba
-                                            if (dragAmount.y < 0) {
-                                                adjustBrightness(activity, 0.03f)
-                                                brightnessLabel = "Brillo +"
-                                            } else {
-                                                adjustBrightness(activity, -0.03f)
-                                                brightnessLabel = "Brillo −"
-                                            }
-                                        }
-                                    }
+                        detectDragGestures { change, dragAmount ->
+                            val y = change.position.y
+                            val x = change.position.x
+                            val width = size.width.toFloat()
+                            if (y > 100f && abs(dragAmount.y) > 10f) {
+                                val delta = if (dragAmount.y > 0) -0.04f else 0.04f
+                                if (x < width / 2f) {
+                                    adjustBrightness(activity, delta)
+                                    brightnessLabel = if (delta < 0) "Brillo −" else "Brillo +"
+                                } else {
+                                    adjustBrightness(activity, -delta)
+                                    brightnessLabel = if (delta < 0) "Brillo +" else "Brillo −"
                                 }
-                                // Pantalla completa con un dedo hacia abajo
-                                if (dragAmount.y > 50 && !isFullscreen) isFullscreen = true
-                                else if (dragAmount.y < -50 && isFullscreen) isFullscreen = false
                             }
-                        )
+                            if (dragAmount.y > 60 && !isFullscreen) isFullscreen = true
+                            else if (dragAmount.y < -60 && isFullscreen) isFullscreen = false
+                        }
                     }
                     .graphicsLayer { scaleX = videoScale; scaleY = videoScale }
             )
@@ -349,7 +330,7 @@ fun PlayerScreen(
                 Text("Puede minimizar la aplicación: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Deslice hacia abajo para pantalla completa. Dos dedos a los lados: brillo.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Deslice hacia abajo para pantalla completa. Lados: brillo.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
