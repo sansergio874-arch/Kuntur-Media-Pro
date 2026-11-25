@@ -63,4 +63,7 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.media3:media3-common:$media3")
     implementation("androidx.media3:media3-session:$media3")
+
+    // ML Kit Translate (on-device) para traducción a español
+    implementation("com.google.mlkit:translate:17.0.2")
 }
