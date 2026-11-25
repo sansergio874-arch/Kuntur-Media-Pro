@@ -9,13 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -76,7 +78,8 @@ fun MediaRow(item: MediaItem, onPlay: (MediaItem) -> Unit) {
 }
 
 @Composable
-fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry: () -> Unit) {
+fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit) {
+    var videoScale by remember(item.id) { mutableFloatStateOf(1f) }
     var isBuffering by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -87,16 +90,23 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                isBuffering = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
-                if (playbackState == Player.STATE_READY) {
-                    errorMsg = null
-                    isBuffering = false
+                when (playbackState) {
+                    Player.STATE_IDLE -> isBuffering = player.playWhenReady
+                    Player.STATE_BUFFERING -> isBuffering = true
+                    Player.STATE_READY -> {
+                        errorMsg = null
+                        isBuffering = player.playWhenReady && !player.isPlaying
+                    }
+                    Player.STATE_ENDED -> {
+                        isPlaying = false
+                        isBuffering = false
+                    }
                 }
-                if (playbackState == Player.STATE_ENDED) isPlaying = false
             }
 
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                isBuffering = !playing && player.playWhenReady && player.playbackState != Player.STATE_ENDED
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -184,7 +194,17 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
                     view.player = player
                     view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(item.id) {
+                        detectTransformGestures { _, _, zoom, _ ->
+                            videoScale = (videoScale * zoom).coerceIn(1f, 3f)
+                        }
+                    }
+                    .graphicsLayer {
+                        scaleX = videoScale
+                        scaleY = videoScale
+                    }
             )
             if (isBuffering && errorMsg == null) {
                 CircularProgressIndicator(color = GoldUi, strokeWidth = 3.dp)
@@ -204,19 +224,13 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit, onRetry
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center
                     )
-                    Spacer(Modifier.height(14.dp))
-                    Button(
-                        onClick = {
-                            errorMsg = null
-                            isBuffering = true
-                            onRetry()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldUi)
-                    ) {
-                        Icon(Icons.Default.Refresh, null, tint = NavyUi)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Reintentar", color = NavyUi)
-                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Comprueba tu conexión o selecciona otra fuente. No se realizarán reintentos automáticos.",
+                        color = Color.White.copy(0.72f),
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         }
