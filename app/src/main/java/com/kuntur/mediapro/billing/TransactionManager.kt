@@ -4,7 +4,6 @@ import android.content.Context
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
 
 data class Transaction(
     val id: String,
@@ -20,17 +19,31 @@ object TransactionManager {
 
     private const val PREFS = "kuntur_transactions"
 
-    fun createTransaction(context: Context, planId: String, planName: String, price: Int): Transaction {
+    fun createTransaction(
+        context: Context,
+        planId: String,
+        planName: String,
+        price: Int,
+        id: String,
+        status: String = "pending"
+    ): Transaction {
         val tx = Transaction(
-            id = UUID.randomUUID().toString().take(8),
+            id = id,
             planId = planId,
             planName = planName,
             price = price,
-            status = "pending",
+            status = status,
             createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
         )
         saveLocal(context, tx)
         return tx
+    }
+
+    fun updateStatus(context: Context, id: String, status: String) {
+        val list = getHistory(context).map {
+            if (it.id == id) it.copy(status = status) else it
+        }
+        persistAll(context, list)
     }
 
     fun getHistory(context: Context): List<Transaction> {
@@ -47,7 +60,12 @@ object TransactionManager {
 
     private fun saveLocal(context: Context, tx: Transaction) {
         val list = getHistory(context).toMutableList()
+        list.removeAll { it.id == tx.id }
         list.add(0, tx)
+        persistAll(context, list)
+    }
+
+    private fun persistAll(context: Context, list: List<Transaction>) {
         val raw = list.joinToString("||") {
             "${it.id}|${it.planId}|${it.planName}|${it.price}|${it.status}|${it.createdAt}|${it.yapeRef}"
         }

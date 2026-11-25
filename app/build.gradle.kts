@@ -12,7 +12,11 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.coerceAtLeast(27) ?: 27
-        versionName = "2.8.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        versionName = "2.9.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+
+        // Backend de pagos (Supabase). Configure secrets en GitHub Actions o deje vacío.
+        buildConfigField("String", "SUPABASE_URL", "\"${System.getenv("SUPABASE_URL") ?: "\"\"}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${System.getenv("SUPABASE_ANON_KEY") ?: "\"\"}\"")
     }
 
     buildTypes {
