@@ -35,6 +35,7 @@ import com.kuntur.mediapro.data.FavoritesManager
 import com.kuntur.mediapro.data.MediaItem
 import com.kuntur.mediapro.data.MediaRepository
 import com.kuntur.mediapro.player.DrmHelper
+import com.kuntur.mediapro.player.PlayerHolder
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -121,6 +122,8 @@ fun AppRoot(player: ExoPlayer) {
         }
         currentItem = item
         section = AppSection.PLAYER
+        // Activa el servicio para notificación y reproducción en segundo plano
+        PlayerHolder.ensureService(context)
         try {
             val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
             val mi = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
@@ -137,10 +140,20 @@ fun AppRoot(player: ExoPlayer) {
 
     when (section) {
         AppSection.PLAYER -> if (currentItem != null) {
+            val item = currentItem!!
+            val isRadio = item.category.equals("Radio", ignoreCase = true)
             PlayerScreen(
-                item = currentItem!!,
+                item = item,
                 player = player,
                 onBack = {
+                    // Radio/TV: seguir en segundo plano al volver.
+                    // Películas: se puede pausar si se prefiere; aquí se mantiene la sesión.
+                    if (!isRadio && !item.category.equals("TV", ignoreCase = true)) {
+                        // Opcional: no detener; la notificación permite controlar.
+                    }
+                    section = AppSection.BROWSE
+                },
+                onStop = {
                     try {
                         player.stop()
                         player.clearMediaItems()
@@ -149,7 +162,7 @@ fun AppRoot(player: ExoPlayer) {
                     section = AppSection.BROWSE
                 },
                 onToggleFavorite = {
-                    FavoritesManager.toggle(context, currentItem!!.id)
+                    FavoritesManager.toggle(context, item.id)
                 }
             )
         } else {
@@ -272,7 +285,6 @@ fun BrowsePagerScreen(
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
     ) {
-        // Top bar
         Row(
             Modifier
                 .fillMaxWidth()
@@ -292,7 +304,6 @@ fun BrowsePagerScreen(
             }
         }
 
-        // Tabs / indicators (tap or swipe)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -305,9 +316,7 @@ fun BrowsePagerScreen(
                     selected = selected,
                     onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                     label = { Text(title, fontSize = 13.sp) },
-                    leadingIcon = {
-                        Icon(icon, null, modifier = Modifier.size(16.dp))
-                    },
+                    leadingIcon = { Icon(icon, null, modifier = Modifier.size(16.dp)) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = GoldS,
                         selectedLabelColor = NavyS,
@@ -327,7 +336,6 @@ fun BrowsePagerScreen(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
 
-        // Search
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },

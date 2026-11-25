@@ -1,10 +1,12 @@
 package com.kuntur.mediapro.player
 
+import android.content.Context
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import androidx.media3.exoplayer.ExoPlayer
 
 /**
- * Referencia compartida al ExoPlayer gestionado por [PlaybackService].
- * Permite que la UI de Compose controle el mismo player que corre en segundo plano.
+ * Referencia compartida al ExoPlayer y control del servicio de segundo plano.
  */
 object PlayerHolder {
     @Volatile
@@ -13,15 +15,31 @@ object PlayerHolder {
 
     @Volatile
     var isServiceRunning: Boolean = false
-        private set
 
     fun attach(player: ExoPlayer) {
         this.player = player
-        isServiceRunning = true
     }
 
     fun detach() {
         player = null
         isServiceRunning = false
+    }
+
+    /** Inicia el servicio de reproducción en segundo plano (notificación de medios). */
+    fun ensureService(context: Context) {
+        if (isServiceRunning) return
+        try {
+            val intent = Intent(context.applicationContext, PlaybackService::class.java)
+            ContextCompat.startForegroundService(context.applicationContext, intent)
+            isServiceRunning = true
+        } catch (_: Throwable) {
+            try {
+                context.applicationContext.startService(
+                    Intent(context.applicationContext, PlaybackService::class.java)
+                )
+                isServiceRunning = true
+            } catch (_: Throwable) {
+            }
+        }
     }
 }

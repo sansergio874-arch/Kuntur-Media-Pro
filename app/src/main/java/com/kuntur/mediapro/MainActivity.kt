@@ -1,7 +1,6 @@
 package com.kuntur.mediapro
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -20,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.media3.exoplayer.ExoPlayer
-import com.kuntur.mediapro.player.PlaybackService
 import com.kuntur.mediapro.player.PlayerHolder
 import com.kuntur.mediapro.player.StreamPlayerFactory
 import com.kuntur.mediapro.ui.theme.KunturMediaProTheme
@@ -30,21 +28,20 @@ class MainActivity : ComponentActivity() {
     private var playerState by mutableStateOf<ExoPlayer?>(null)
 
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* opcional */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* resultado opcional */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         requestNotificationPermissionIfNeeded()
-        startPlaybackService()
 
-        // Reutilizar el player del servicio si ya existe; si no, crear uno local temporal.
+        // El player se crea aquí; el servicio de segundo plano se inicia al reproducir.
         val existing = PlayerHolder.player
         playerState = existing ?: try {
-            StreamPlayerFactory.create(this).also { PlayerHolder.attach(it) }
+            StreamPlayerFactory.create(applicationContext).also { PlayerHolder.attach(it) }
         } catch (_: Throwable) {
             try {
-                ExoPlayer.Builder(this).build().also { PlayerHolder.attach(it) }
+                ExoPlayer.Builder(applicationContext).build().also { PlayerHolder.attach(it) }
             } catch (_: Throwable) {
                 null
             }
@@ -68,33 +65,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Sincronizar referencia si el servicio ya creó el player.
         PlayerHolder.player?.let { playerState = it }
     }
 
     override fun onDestroy() {
-        // No liberar el player aquí: el servicio lo mantiene para reproducción en segundo plano.
-        // Solo se libera cuando el servicio se destruye (usuario detiene o no hay media activa).
-        if (isFinishing && !PlayerHolder.isServiceRunning) {
-            try {
-                playerState?.release()
-            } catch (_: Throwable) {
-            }
-            PlayerHolder.detach()
-        }
+        // No liberar el ExoPlayer si sigue reproduciendo en segundo plano.
+        // Se libera cuando el usuario detiene la reproducción o el sistema destruye el servicio.
         super.onDestroy()
-    }
-
-    private fun startPlaybackService() {
-        try {
-            val intent = Intent(this, PlaybackService::class.java)
-            ContextCompat.startForegroundService(this, intent)
-        } catch (_: Throwable) {
-            try {
-                startService(Intent(this, PlaybackService::class.java))
-            } catch (_: Throwable) {
-            }
-        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

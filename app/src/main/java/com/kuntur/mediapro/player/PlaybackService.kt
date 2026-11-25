@@ -12,25 +12,21 @@ import androidx.media3.session.MediaSessionService
 import com.kuntur.mediapro.MainActivity
 
 /**
- * Servicio en primer plano de tipo mediaPlayback.
- * Mantiene el ExoPlayer vivo cuando la app pasa a segundo plano
- * y expone controles en la notificación del sistema.
+ * Servicio mediaPlayback en primer plano.
+ * Usa el ExoPlayer compartido en [PlayerHolder] y muestra controles en la notificación.
  */
 @UnstableApi
 class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
-    private var player: ExoPlayer? = null
 
     override fun onCreate() {
         super.onCreate()
-        val exo = try {
-            StreamPlayerFactory.create(this)
+
+        val exo = PlayerHolder.player ?: try {
+            StreamPlayerFactory.create(applicationContext).also { PlayerHolder.attach(it) }
         } catch (_: Throwable) {
-            ExoPlayer.Builder(this).build().apply {
-                playWhenReady = true
-                volume = 1f
-            }
+            ExoPlayer.Builder(applicationContext).build().also { PlayerHolder.attach(it) }
         }
 
         try {
@@ -48,9 +44,6 @@ class PlaybackService : MediaSessionService() {
             exo.setWakeMode(C.WAKE_MODE_NETWORK)
         } catch (_: Throwable) {
         }
-
-        player = exo
-        PlayerHolder.attach(exo)
 
         val sessionActivity = PendingIntent.getActivity(
             this,
@@ -72,26 +65,23 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val p = player
+        val p = PlayerHolder.player
         if (p == null || !p.playWhenReady || p.mediaItemCount == 0 ||
             p.playbackState == Player.STATE_ENDED || p.playbackState == Player.STATE_IDLE
         ) {
             stopSelf()
         }
-        // Si está reproduciendo, el servicio permanece activo en segundo plano.
+        // Si hay reproducción activa, el servicio permanece en segundo plano.
     }
 
     override fun onDestroy() {
         mediaSession?.run {
-            try {
-                player.release()
-            } catch (_: Throwable) {
-            }
             release()
             mediaSession = null
         }
-        player = null
-        PlayerHolder.detach()
+        // No liberamos el player aquí si la Activity aún lo usa;
+        // solo marcamos el servicio como detenido.
+        PlayerHolder.isServiceRunning = false
         super.onDestroy()
     }
 }
