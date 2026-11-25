@@ -47,8 +47,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success() && github.ref == 'refs/heads/main'
         with:
-          tag_name: v2.8.${{ github.run_number }}
-          name: Kuntur Media Pro v2.8.${{ github.run_number }}
+          tag_name: v2.9.${{ github.run_number }}
+          name: Kuntur Media Pro v2.9.${{ github.run_number }}
           body: APK Kuntur Media Pro generado y compilado automáticamente por GitHub Actions.
           files: app/build/outputs/apk/debug/*.apk
           draft: false
