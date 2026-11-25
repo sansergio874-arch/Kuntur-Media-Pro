@@ -1,5 +1,7 @@
 package com.kuntur.mediapro
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -125,6 +127,7 @@ fun PlayerScreen(
     onToggleFavorite: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val activity = context as? Activity
     var videoScale by remember(item.id) { mutableFloatStateOf(1f) }
     var isBuffering by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -136,6 +139,26 @@ fun PlayerScreen(
 
     val isRadio = item.category.equals("Radio", ignoreCase = true)
     val isVideo = !isRadio
+
+    // Rotar pantalla al entrar/salir de pantalla completa
+    LaunchedEffect(isFullscreen) {
+        try {
+            activity?.requestedOrientation = if (isFullscreen) {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            }
+        } catch (_: Throwable) {}
+    }
+
+    // Restaurar orientación al salir de la pantalla
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } catch (_: Throwable) {}
+        }
+    }
 
     LaunchedEffect(currentQuality) {
         try { applyQuality(player, currentQuality) } catch (_: Throwable) {}
@@ -184,7 +207,6 @@ fun PlayerScreen(
                 IconButton(onClick = { isFav = FavoritesManager.toggle(context, item.id); onToggleFavorite() }) {
                     Icon(if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Favorito", tint = if (isFav) Color(0xFFE53935) else GoldUi)
                 }
-                // Solo botón de pantalla completa en la barra superior (sin tuerca)
                 if (isVideo) {
                     IconButton(onClick = { isFullscreen = true }) {
                         Icon(Icons.Default.Fullscreen, contentDescription = "Pantalla completa", tint = GoldUi)
@@ -208,7 +230,6 @@ fun PlayerScreen(
                         controllerShowTimeoutMs = 3500
                         setShowNextButton(false)
                         setShowPreviousButton(false)
-                        // Ocultar el botón de ajustes nativo de ExoPlayer (tuerca inferior)
                         try { setShowSubtitleButton(false) } catch (_: Throwable) {}
                     }
                 },
@@ -221,8 +242,13 @@ fun PlayerScreen(
                     .pointerInput(item.id) { detectTransformGestures { _, _, zoom, _ -> videoScale = (videoScale * zoom).coerceIn(1f, 3f) } }
                     .pointerInput(isFullscreen) {
                         detectDragGestures { _, dragAmount ->
-                            if (dragAmount.y < -40 && !isFullscreen) isFullscreen = true
-                            else if (dragAmount.y > 60 && isFullscreen) isFullscreen = false
+                            // Deslizar hacia ABAJO = entrar en pantalla completa
+                            // Deslizar hacia ARRIBA = salir de pantalla completa
+                            if (dragAmount.y > 50 && !isFullscreen) {
+                                isFullscreen = true
+                            } else if (dragAmount.y < -50 && isFullscreen) {
+                                isFullscreen = false
+                            }
                         }
                     }
                     .graphicsLayer { scaleX = videoScale; scaleY = videoScale }
@@ -263,7 +289,6 @@ fun PlayerScreen(
                     else -> "Pausado"
                 }
                 Text(status, color = Color.White.copy(0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f))
-                // Única tuerca: abajo, junto al estado
                 if (isVideo) {
                     IconButton(onClick = { showQualityMenu = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Calidad", tint = GoldUi)
@@ -275,7 +300,7 @@ fun PlayerScreen(
                 Text("Puede minimizar la app: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Deslice hacia arriba para pantalla completa. Pellizque para zoom.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Deslice hacia abajo para pantalla completa (gira a horizontal).", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
