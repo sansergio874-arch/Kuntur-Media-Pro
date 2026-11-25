@@ -5,14 +5,16 @@ import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
@@ -38,15 +40,33 @@ private val NavyMidT = Color(0xFF132337)
 private val GoldT = Color(0xFFE8B923)
 private val CardBgT = Color(0xFF1A2D45)
 
+data class SourceLang(val code: String, val label: String)
+
+private val SOURCE_LANGUAGES = listOf(
+    SourceLang(TranslateLanguage.ENGLISH, "Inglés"),
+    SourceLang(TranslateLanguage.PORTUGUESE, "Portugués"),
+    SourceLang(TranslateLanguage.FRENCH, "Francés"),
+    SourceLang(TranslateLanguage.GERMAN, "Alemán"),
+    SourceLang(TranslateLanguage.ITALIAN, "Italiano"),
+    SourceLang(TranslateLanguage.CHINESE, "Chino"),
+    SourceLang(TranslateLanguage.JAPANESE, "Japonés"),
+    SourceLang(TranslateLanguage.KOREAN, "Coreano"),
+    SourceLang(TranslateLanguage.RUSSIAN, "Ruso"),
+    SourceLang(TranslateLanguage.ARABIC, "Árabe")
+)
+
 @Composable
 fun TranslatorScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     var recognizedText by remember { mutableStateOf("") }
     var translatedText by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf("Pulse el micrófono y hable en cualquier idioma.") }
+    var status by remember { mutableStateOf("Seleccione idioma y pulse el micrófono.") }
     var isListening by remember { mutableStateOf(false) }
     var isTranslating by remember { mutableStateOf(false) }
+    var isDownloading by remember { mutableStateOf(false) }
     var ttsReady by remember { mutableStateOf(false) }
+    var selectedLang by remember { mutableStateOf(SOURCE_LANGUAGES[0]) }
+    var modelsReady by remember { mutableStateOf(false) }
 
     val tts = remember {
         TextToSpeech(context) { statusCode ->
@@ -71,15 +91,15 @@ fun TranslatorScreen(onBack: () -> Unit) {
             val text = matches?.firstOrNull().orEmpty()
             recognizedText = text
             if (text.isNotBlank()) {
-                status = "Traduciendo a español…"
+                status = "Traduciendo ${selectedLang.label} → Español…"
                 isTranslating = true
-                translateToSpanish(text) { translated, error ->
+                translateToSpanish(text, selectedLang.code) { translated, error ->
                     isTranslating = false
                     if (error != null) {
                         status = "Error: $error"
                     } else {
                         translatedText = translated.orEmpty()
-                        status = "Traducción lista. Pulse el altavoz para escuchar."
+                        status = "Traducción lista (offline)."
                         if (ttsReady && translatedText.isNotBlank()) {
                             tts.speak(translatedText, TextToSpeech.QUEUE_FLUSH, null, "trad")
                         }
@@ -96,76 +116,107 @@ fun TranslatorScreen(onBack: () -> Unit) {
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startListening(speechLauncher) { isListening = true; status = "Escuchando…" }
+        if (granted) startListening(speechLauncher, selectedLang.code) { isListening = true; status = "Escuchando…" }
         else status = "Se requiere permiso de micrófono."
+    }
+
+    fun downloadModels() {
+        isDownloading = true
+        status = "Descargando modelos para uso offline…"
+        var pending = SOURCE_LANGUAGES.size
+        var failed = 0
+        SOURCE_LANGUAGES.forEach { lang ->
+            downloadModelFor(lang.code) { ok ->
+                if (!ok) failed++
+                pending--
+                if (pending <= 0) {
+                    isDownloading = false
+                    modelsReady = failed == 0
+                    status = if (failed == 0) "Modelos listos. Funciona sin internet." else "Algunos modelos no se descargaron ($failed)."
+                }
+            }
+        }
     }
 
     Column(
         Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(NavyT, NavyMidT)))
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← Volver", color = GoldT) }
             Spacer(Modifier.weight(1f))
-            Text("Traductor", color = GoldT, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Traductor Offline", color = GoldT, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
-            "Traduce cualquier idioma a español en audio",
+            "Traduce a español sin internet (tras descargar modelos)",
             color = Color.White.copy(0.7f),
-            fontSize = 14.sp
+            fontSize = 13.sp
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardBgT),
-            shape = RoundedCornerShape(14.dp)
-        ) {
-            Column(Modifier.padding(16.dp)) {
-                Text("Texto reconocido", color = GoldT, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    recognizedText.ifBlank { "—" },
-                    color = Color.White,
-                    fontSize = 15.sp
+        Text("Idioma de origen", color = GoldT, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Spacer(Modifier.height(6.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(SOURCE_LANGUAGES) { lang ->
+                FilterChip(
+                    selected = selectedLang.code == lang.code,
+                    onClick = { selectedLang = lang },
+                    label = { Text(lang.label, fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = GoldT,
+                        selectedLabelColor = NavyT,
+                        containerColor = CardBgT,
+                        labelColor = Color.White
+                    )
                 )
             }
         }
         Spacer(Modifier.height(12.dp))
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardBgT),
-            shape = RoundedCornerShape(14.dp)
+        Button(
+            onClick = { downloadModels() },
+            enabled = !isDownloading,
+            colors = ButtonDefaults.buttonColors(containerColor = CardBgT),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
+            Icon(Icons.Default.CloudDownload, null, tint = GoldT, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (isDownloading) "Descargando…" else "Descargar modelos offline", color = GoldT)
+        }
+        if (modelsReady) {
+            Text("✓ Modelos descargados", color = Color(0xFF81C784), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBgT), shape = RoundedCornerShape(14.dp)) {
+            Column(Modifier.padding(16.dp)) {
+                Text("Texto reconocido", color = GoldT, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Spacer(Modifier.height(6.dp))
+                Text(recognizedText.ifBlank { "—" }, color = Color.White, fontSize = 15.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBgT), shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(16.dp)) {
                 Text("Traducción al español", color = GoldT, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    translatedText.ifBlank { "—" },
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Text(translatedText.ifBlank { "—" }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
         }
         Spacer(Modifier.height(20.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             FilledIconButton(
                 onClick = {
-                    val granted = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (granted) {
-                        startListening(speechLauncher) { isListening = true; status = "Escuchando…" }
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
+                    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+                    if (granted) startListening(speechLauncher, selectedLang.code) { isListening = true; status = "Escuchando…" }
+                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 },
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (isListening) Color(0xFFC62828) else GoldT),
                 modifier = Modifier.size(72.dp)
@@ -177,9 +228,7 @@ fun TranslatorScreen(onBack: () -> Unit) {
                 onClick = {
                     if (ttsReady && translatedText.isNotBlank()) {
                         tts.speak(translatedText, TextToSpeech.QUEUE_FLUSH, null, "trad2")
-                    } else {
-                        status = "No hay traducción para reproducir."
-                    }
+                    } else status = "No hay traducción para reproducir."
                 },
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = CardBgT),
                 modifier = Modifier.size(72.dp)
@@ -188,16 +237,16 @@ fun TranslatorScreen(onBack: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        if (isTranslating) {
-            CircularProgressIndicator(color = GoldT, strokeWidth = 3.dp)
+        Spacer(Modifier.height(12.dp))
+        if (isTranslating || isDownloading) {
+            CircularProgressIndicator(color = GoldT, strokeWidth = 3.dp, modifier = Modifier.align(Alignment.CenterHorizontally))
             Spacer(Modifier.height(8.dp))
         }
         Text(status, color = Color.White.copy(0.75f), fontSize = 13.sp)
 
         Spacer(Modifier.weight(1f))
         Text(
-            "La primera traducción puede descargar el modelo de idioma (requiere internet una vez).",
+            "Una vez descargados los modelos, la traducción funciona sin conexión.",
             color = Color.White.copy(0.4f),
             fontSize = 11.sp
         )
@@ -206,22 +255,36 @@ fun TranslatorScreen(onBack: () -> Unit) {
 
 private fun startListening(
     launcher: androidx.activity.result.ActivityResultLauncher<Intent>,
+    sourceLangCode: String,
     onStart: () -> Unit
 ) {
     onStart()
+    val locale = when (sourceLangCode) {
+        TranslateLanguage.ENGLISH -> "en-US"
+        TranslateLanguage.PORTUGUESE -> "pt-BR"
+        TranslateLanguage.FRENCH -> "fr-FR"
+        TranslateLanguage.GERMAN -> "de-DE"
+        TranslateLanguage.ITALIAN -> "it-IT"
+        TranslateLanguage.CHINESE -> "zh-CN"
+        TranslateLanguage.JAPANESE -> "ja-JP"
+        TranslateLanguage.KOREAN -> "ko-KR"
+        TranslateLanguage.RUSSIAN -> "ru-RU"
+        TranslateLanguage.ARABIC -> "ar-SA"
+        else -> "en-US"
+    }
     val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
         putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "") // auto-detect
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale)
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
     }
     launcher.launch(intent)
 }
 
-private fun translateToSpanish(text: String, onResult: (String?, String?) -> Unit) {
+private fun translateToSpanish(text: String, sourceCode: String, onResult: (String?, String?) -> Unit) {
     try {
         val options = TranslatorOptions.Builder()
-            .setSourceLanguage(TranslateLanguage.ENGLISH) // se puede ampliar; ML Kit requiere fuente conocida
+            .setSourceLanguage(sourceCode)
             .setTargetLanguage(TranslateLanguage.SPANISH)
             .build()
         val translator: Translator = Translation.getClient(options)
@@ -232,8 +295,24 @@ private fun translateToSpanish(text: String, onResult: (String?, String?) -> Uni
                     .addOnSuccessListener { translated -> onResult(translated, null) }
                     .addOnFailureListener { e -> onResult(null, e.message ?: "Error de traducción") }
             }
-            .addOnFailureListener { e -> onResult(null, e.message ?: "No se pudo descargar el modelo") }
+            .addOnFailureListener { e -> onResult(null, e.message ?: "Modelo no disponible. Descargue primero.") }
     } catch (e: Throwable) {
         onResult(null, e.message ?: "Error")
+    }
+}
+
+private fun downloadModelFor(sourceCode: String, onDone: (Boolean) -> Unit) {
+    try {
+        val options = TranslatorOptions.Builder()
+            .setSourceLanguage(sourceCode)
+            .setTargetLanguage(TranslateLanguage.SPANISH)
+            .build()
+        val translator = Translation.getClient(options)
+        val conditions = DownloadConditions.Builder().build()
+        translator.downloadModelIfNeeded(conditions)
+            .addOnSuccessListener { onDone(true) }
+            .addOnFailureListener { onDone(false) }
+    } catch (_: Throwable) {
+        onDone(false)
     }
 }
