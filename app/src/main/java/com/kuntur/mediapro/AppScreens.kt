@@ -12,10 +12,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
@@ -55,7 +58,7 @@ private val NavyMidS = Color(0xFF132337)
 private val CardBgS = Color(0xFF1A2D45)
 private val GoldS = Color(0xFFE8B923)
 
-enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES }
+enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES, SETTINGS }
 
 fun canAccess(context: Context, item: MediaItem): Boolean =
     PurchaseManager.canAccess(context, item)
@@ -76,8 +79,10 @@ fun AppRoot(player: ExoPlayer) {
     var playlistMessage by remember { mutableStateOf<String?>(null) }
     var importingPlaylist by remember { mutableStateOf(false) }
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+
     LaunchedEffect(Unit) {
-        delay(1000)
+        delay(1400)
         showSplash = false
     }
 
@@ -95,199 +100,277 @@ fun AppRoot(player: ExoPlayer) {
     }
 
     if (showSplash) {
-        Box(
-            Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS))),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("K", color = GoldS, fontSize = 52.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                Text("Kuntur Media Pro", color = GoldS, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                Text("TV · IPTV · Radios · Películas", color = Color.White.copy(0.65f), fontSize = 14.sp)
-            }
-        }
+        SplashScreen()
         return
     }
 
-    if (showPlaylistDialog) {
-        AlertDialog(
-            onDismissRequest = { if (!importingPlaylist) showPlaylistDialog = false },
-            title = { Text("Agregar lista IPTV (M3U)") },
-            text = {
-                Column {
-                    Text(
-                        "Pegue la URL HTTPS de su lista M3U/M3U8 autorizada. " +
-                            "Las entradas se ordenarán automáticamente: radios, canales o películas.",
-                        fontSize = 13.sp
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = playlistUrl,
-                        onValueChange = { playlistUrl = it },
-                        singleLine = true,
-                        label = { Text("URL de lista M3U") },
-                        placeholder = { Text("https://servidor/lista.m3u") },
-                        enabled = !importingPlaylist
-                    )
-                    playlistMessage?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            it,
-                            color = if (it.startsWith("Lista")) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !importingPlaylist && playlistUrl.startsWith("https://", true),
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(drawerContainerColor = NavyMidS) {
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    "Kuntur Media Pro",
+                    color = GoldS,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 20.dp)
+                )
+                Text(
+                    "Menú",
+                    color = Color.White.copy(0.55f),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
+                )
+                Spacer(Modifier.height(12.dp))
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Home, null, tint = GoldS) },
+                    label = { Text("Inicio", color = Color.White) },
+                    selected = section == AppSection.HOME,
                     onClick = {
-                        importingPlaylist = true
-                        playlistMessage = null
-                        scope.launch {
-                            try {
-                                val imported = loadPlaylist(playlistUrl.trim())
-                                PlaylistCatalog.saveSource(context, playlistUrl.trim())
-                                val (r, c, m) = PlaylistCatalog.importItems(imported)
-                                val total = r + c + m
-                                playlistMessage = if (total == 0) {
-                                    "No se encontraron entradas nuevas."
-                                } else {
-                                    "Lista importada: $r radios · $c canales · $m películas."
-                                }
-                            } catch (error: Exception) {
-                                playlistMessage =
-                                    "No se pudo importar: ${error.message?.take(110) ?: "revise la URL"}"
-                            } finally {
-                                importingPlaylist = false
-                            }
+                        section = AppSection.HOME
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Settings, null, tint = GoldS) },
+                    label = { Text("Configuraciones", color = Color.White) },
+                    selected = section == AppSection.SETTINGS,
+                    onClick = {
+                        section = AppSection.SETTINGS
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Star, null, tint = GoldS) },
+                    label = { Text("Planes Premium", color = Color.White) },
+                    selected = section == AppSection.PLANS,
+                    onClick = {
+                        section = AppSection.PLANS
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "Fuentes autorizadas únicamente",
+                    color = Color.White.copy(0.4f),
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(20.dp)
+                )
+            }
+        }
+    ) {
+        if (showPlaylistDialog) {
+            AlertDialog(
+                onDismissRequest = { if (!importingPlaylist) showPlaylistDialog = false },
+                title = { Text("Agregar lista IPTV (M3U)") },
+                text = {
+                    Column {
+                        Text(
+                            "Pegue la URL HTTPS de su lista M3U/M3U8 autorizada. " +
+                                "Las entradas se ordenarán automáticamente: radios, canales o películas.",
+                            fontSize = 13.sp
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedTextField(
+                            value = playlistUrl,
+                            onValueChange = { playlistUrl = it },
+                            singleLine = true,
+                            label = { Text("URL de lista M3U") },
+                            placeholder = { Text("https://servidor/lista.m3u") },
+                            enabled = !importingPlaylist
+                        )
+                        playlistMessage?.let {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                it,
+                                color = if (it.startsWith("Lista")) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp
+                            )
                         }
                     }
-                ) {
-                    if (importingPlaylist) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("Importar")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { if (!importingPlaylist) showPlaylistDialog = false }) { Text("Cerrar") }
-            }
-        )
-    }
-
-    if (accessDeniedMessage != null) {
-        AlertDialog(
-            onDismissRequest = { accessDeniedMessage = null },
-            title = { Text("Contenido Premium") },
-            text = { Text(accessDeniedMessage!!) },
-            confirmButton = {
-                Button(
-                    onClick = { accessDeniedMessage = null; section = AppSection.PLANS },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldS)
-                ) { Text("Ver planes", color = NavyS) }
-            },
-            dismissButton = {
-                TextButton(onClick = { accessDeniedMessage = null }) { Text("Cerrar", color = GoldS) }
-            }
-        )
-    }
-
-    if (playErrorMessage != null) {
-        AlertDialog(
-            onDismissRequest = { playErrorMessage = null },
-            title = { Text("Error de reproducción") },
-            text = { Text(playErrorMessage!!) },
-            confirmButton = {
-                Button(
-                    onClick = { playErrorMessage = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldS)
-                ) { Text("Aceptar", color = NavyS) }
-            }
-        )
-    }
-
-    fun startPlayback(item: MediaItem) {
-        if (!canAccess(context, item)) {
-            accessDeniedMessage =
-                "Contenido Premium. Elija un plan, pague por Yape ${BillingConfig.YAPE_NUMBER} e indique su código."
-            return
-        }
-        currentItem = item
-        section = AppSection.PLAYER
-        PlayerHolder.ensureService(context)
-        try {
-            val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
-            val mi = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
-            player.stop()
-            player.clearMediaItems()
-            player.setMediaItem(mi)
-            player.prepare()
-            player.playWhenReady = true
-            player.play()
-        } catch (e: Exception) {
-            playErrorMessage = e.message?.take(120) ?: "No se pudo iniciar la reproducción."
-        }
-    }
-
-    when (section) {
-        AppSection.PLAYER -> if (currentItem != null) {
-            val item = currentItem!!
-            PlayerScreen(
-                item = item,
-                player = player,
-                onBack = { section = AppSection.BROWSE },
-                onStop = {
-                    try {
-                        player.stop()
-                        player.clearMediaItems()
-                    } catch (_: Exception) {
+                },
+                confirmButton = {
+                    Button(
+                        enabled = !importingPlaylist && playlistUrl.startsWith("https://", true),
+                        onClick = {
+                            importingPlaylist = true
+                            playlistMessage = null
+                            scope.launch {
+                                try {
+                                    val imported = loadPlaylist(playlistUrl.trim())
+                                    PlaylistCatalog.saveSource(context, playlistUrl.trim())
+                                    val (r, c, m) = PlaylistCatalog.importItems(imported)
+                                    val total = r + c + m
+                                    playlistMessage = if (total == 0) {
+                                        "No se encontraron entradas nuevas."
+                                    } else {
+                                        "Lista importada: $r radios · $c canales · $m películas."
+                                    }
+                                } catch (error: Exception) {
+                                    playlistMessage =
+                                        "No se pudo importar: ${error.message?.take(110) ?: "revise la URL"}"
+                                } finally {
+                                    importingPlaylist = false
+                                }
+                            }
+                        }
+                    ) {
+                        if (importingPlaylist) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        else Text("Importar")
                     }
+                },
+                dismissButton = {
+                    TextButton(onClick = { if (!importingPlaylist) showPlaylistDialog = false }) { Text("Cerrar") }
+                }
+            )
+        }
+
+        if (accessDeniedMessage != null) {
+            AlertDialog(
+                onDismissRequest = { accessDeniedMessage = null },
+                title = { Text("Contenido Premium") },
+                text = { Text(accessDeniedMessage!!) },
+                confirmButton = {
+                    Button(
+                        onClick = { accessDeniedMessage = null; section = AppSection.PLANS },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldS)
+                    ) { Text("Ver planes", color = NavyS) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { accessDeniedMessage = null }) { Text("Cerrar", color = GoldS) }
+                }
+            )
+        }
+
+        if (playErrorMessage != null) {
+            AlertDialog(
+                onDismissRequest = { playErrorMessage = null },
+                title = { Text("Error de reproducción") },
+                text = { Text(playErrorMessage!!) },
+                confirmButton = {
+                    Button(
+                        onClick = { playErrorMessage = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldS)
+                    ) { Text("Aceptar", color = NavyS) }
+                }
+            )
+        }
+
+        fun startPlayback(item: MediaItem) {
+            if (!canAccess(context, item)) {
+                accessDeniedMessage =
+                    "Contenido Premium. Elija un plan, pague por Yape ${BillingConfig.YAPE_NUMBER} e indique su código."
+                return
+            }
+            currentItem = item
+            section = AppSection.PLAYER
+            PlayerHolder.ensureService(context)
+            try {
+                val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
+                val mi = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
+                player.stop()
+                player.clearMediaItems()
+                player.setMediaItem(mi)
+                player.prepare()
+                player.playWhenReady = true
+                player.play()
+            } catch (e: Exception) {
+                playErrorMessage = e.message?.take(120) ?: "No se pudo iniciar la reproducción."
+            }
+        }
+
+        when (section) {
+            AppSection.PLAYER -> if (currentItem != null) {
+                val item = currentItem!!
+                PlayerScreen(
+                    item = item,
+                    player = player,
+                    onBack = { section = AppSection.BROWSE },
+                    onStop = {
+                        try {
+                            player.stop()
+                            player.clearMediaItems()
+                        } catch (_: Exception) {
+                        }
+                        section = AppSection.BROWSE
+                    },
+                    onToggleFavorite = { FavoritesManager.toggle(context, item.id) }
+                )
+            } else {
+                section = AppSection.HOME
+            }
+
+            AppSection.PLANS -> PlansScreen(onBack = { section = AppSection.HOME })
+
+            AppSection.FAVORITES -> FavoritesScreen(
+                onPlay = { startPlayback(it) },
+                onBack = { section = AppSection.HOME }
+            )
+
+            AppSection.SETTINGS -> SettingsScreen(
+                onBack = { section = AppSection.HOME },
+                onClearPlaylists = {
+                    PlaylistCatalog.clearImported(context)
+                }
+            )
+
+            AppSection.BROWSE -> BrowsePagerScreen(
+                initialPage = browseInitialPage,
+                onPlay = { startPlayback(it) },
+                onBack = { section = AppSection.HOME },
+                onPlans = { section = AppSection.PLANS }
+            )
+
+            AppSection.HOME -> HomeHub(
+                radioCount = PlaylistCatalog.radios.size,
+                channelCount = PlaylistCatalog.channels.size,
+                movieCount = PlaylistCatalog.movies.size,
+                onMenu = { scope.launch { drawerState.open() } },
+                onRadios = {
+                    browseInitialPage = 0
                     section = AppSection.BROWSE
                 },
-                onToggleFavorite = { FavoritesManager.toggle(context, item.id) }
+                onChannels = {
+                    browseInitialPage = 1
+                    section = AppSection.BROWSE
+                },
+                onMovies = {
+                    browseInitialPage = 2
+                    section = AppSection.BROWSE
+                },
+                onFavorites = { section = AppSection.FAVORITES },
+                onPlans = { section = AppSection.PLANS },
+                onAddPlaylist = {
+                    playlistUrl = ""
+                    playlistMessage = null
+                    showPlaylistDialog = true
+                }
             )
-        } else {
-            section = AppSection.HOME
         }
+    }
+}
 
-        AppSection.PLANS -> PlansScreen(onBack = { section = AppSection.HOME })
-
-        AppSection.FAVORITES -> FavoritesScreen(
-            onPlay = { startPlayback(it) },
-            onBack = { section = AppSection.HOME }
-        )
-
-        AppSection.BROWSE -> BrowsePagerScreen(
-            initialPage = browseInitialPage,
-            onPlay = { startPlayback(it) },
-            onBack = { section = AppSection.HOME },
-            onPlans = { section = AppSection.PLANS }
-        )
-
-        AppSection.HOME -> HomeHub(
-            radioCount = PlaylistCatalog.radios.size,
-            channelCount = PlaylistCatalog.channels.size,
-            movieCount = PlaylistCatalog.movies.size,
-            onRadios = {
-                browseInitialPage = 0
-                section = AppSection.BROWSE
-            },
-            onChannels = {
-                browseInitialPage = 1
-                section = AppSection.BROWSE
-            },
-            onMovies = {
-                browseInitialPage = 2
-                section = AppSection.BROWSE
-            },
-            onFavorites = { section = AppSection.FAVORITES },
-            onPlans = { section = AppSection.PLANS },
-            onAddPlaylist = {
-                playlistUrl = ""
-                playlistMessage = null
-                showPlaylistDialog = true
-            }
-        )
+@Composable
+fun SplashScreen() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(NavyS, NavyMidS))),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("K", color = GoldS, fontSize = 64.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(16.dp))
+            Text("Kuntur Media Pro", color = GoldS, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text("TV · IPTV · Radios · Películas", color = Color.White.copy(0.7f), fontSize = 14.sp)
+            Spacer(Modifier.height(32.dp))
+            CircularProgressIndicator(color = GoldS, strokeWidth = 3.dp)
+        }
     }
 }
 
@@ -296,6 +379,7 @@ fun HomeHub(
     radioCount: Int,
     channelCount: Int,
     movieCount: Int,
+    onMenu: () -> Unit,
     onRadios: () -> Unit,
     onChannels: () -> Unit,
     onMovies: () -> Unit,
@@ -309,9 +393,19 @@ fun HomeHub(
             .background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
             .padding(20.dp)
     ) {
-        Text("Kuntur Media Pro", color = GoldS, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Text("Tu entretenimiento en un solo lugar", color = Color.White.copy(0.6f), fontSize = 14.sp)
-        Spacer(Modifier.height(24.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onMenu) {
+                Icon(Icons.Default.Menu, contentDescription = "Menú", tint = GoldS)
+            }
+            Column(Modifier.weight(1f)) {
+                Text("Kuntur Media Pro", color = GoldS, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("Tu entretenimiento en un solo lugar", color = Color.White.copy(0.6f), fontSize = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
 
         SectionCard("TV en vivo e IPTV", "$channelCount canales + tus listas M3U", Icons.Default.Tv, onChannels)
         Spacer(Modifier.height(12.dp))
@@ -321,7 +415,6 @@ fun HomeHub(
         Spacer(Modifier.height(12.dp))
         SectionCard("Favoritos", "Sus contenidos guardados", Icons.Default.Favorite, onFavorites)
 
-        // Botón en la zona marcada del Inicio
         Spacer(Modifier.height(20.dp))
         Button(
             onClick = onAddPlaylist,
@@ -347,11 +440,100 @@ fun HomeHub(
         ) {
             Text("Planes Premium y Yape", color = GoldS, fontWeight = FontWeight.SemiBold)
         }
+    }
+}
+
+@Composable
+fun SettingsScreen(onBack: () -> Unit, onClearPlaylists: () -> Unit) {
+    val context = LocalContext.current
+    var showClearConfirm by remember { mutableStateOf(false) }
+    val version = "2.9"
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Limpiar listas importadas") },
+            text = { Text("Se eliminarán todas las listas M3U guardadas y se restaurará el catálogo base. ¿Continuar?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onClearPlaylists()
+                        showClearConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                ) { Text("Limpiar", color = Color.White) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("Cancelar", color = GoldS) }
+            }
+        )
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(NavyS, NavyMidS)))
+            .padding(20.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) {
+                Icon(Icons.Default.Home, null, tint = GoldS, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Inicio", color = GoldS)
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Default.Settings, null, tint = GoldS)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("Configuraciones", color = GoldS, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("Opciones de la aplicación", color = Color.White.copy(0.55f), fontSize = 13.sp)
+        Spacer(Modifier.height(24.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardBgS),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, null, tint = GoldS)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Versión", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(version, color = Color.White.copy(0.6f), fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = { showClearConfirm = true },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF37474F)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Limpiar listas M3U importadas", color = Color.White)
+        }
+
+        Spacer(Modifier.height(24.dp))
         Text(
-            "Utiliza fuentes propias o autorizadas.",
+            "Yape: ${BillingConfig.YAPE_NUMBER}",
+            color = GoldS,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            "La activación de planes se realiza tras verificar el pago.",
+            color = Color.White.copy(0.55f),
+            fontSize = 13.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+
+        Spacer(Modifier.weight(1f))
+        Text(
+            "Utilice únicamente fuentes de contenido autorizadas.",
             color = Color.White.copy(0.4f),
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 8.dp)
+            fontSize = 12.sp
         )
     }
 }
