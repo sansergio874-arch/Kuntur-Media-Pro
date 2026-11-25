@@ -16,12 +16,13 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 
 /**
- * ExoPlayer con buffer amplio, reproducción estable y sin reintentos automáticos.
+ * ExoPlayer optimizado para reducir cortes: buffer amplio, timeouts generosos
+ * y sin reintentos automáticos (el usuario decide reintentar).
  */
 object StreamPlayerFactory {
 
     private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.6"
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.8"
 
     fun create(context: Context): ExoPlayer {
         return try {
@@ -37,14 +38,14 @@ object StreamPlayerFactory {
     private fun createConfigured(context: Context): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(USER_AGENT)
-            .setConnectTimeoutMs(30_000)
-            .setReadTimeoutMs(45_000)
+            .setConnectTimeoutMs(35_000)
+            .setReadTimeoutMs(55_000)
             .setAllowCrossProtocolRedirects(true)
             .setKeepPostFor302Redirects(true)
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
-        // No repetir solicitudes fallidas: informar el error al usuario.
+        // Sin reintentos automáticos: se informa el error al usuario.
         val errorPolicy: LoadErrorHandlingPolicy = object : DefaultLoadErrorHandlingPolicy(0) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                 return C.TIME_UNSET
@@ -59,14 +60,13 @@ object StreamPlayerFactory {
             .setDataSourceFactory(dataSourceFactory)
             .setLoadErrorHandlingPolicy(errorPolicy)
 
-        // Buffer amplio para reducir rebuffering (cortes)
-        // minBuffer, maxBuffer, bufferForPlayback, bufferForPlaybackAfterRebuffer
+        // Buffer más amplio para minimizar cortes en redes inestables
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs */ 25_000,
-                /* maxBufferMs */ 90_000,
-                /* bufferForPlaybackMs */ 3_500,
-                /* bufferForPlaybackAfterRebufferMs */ 8_000
+                /* minBufferMs */ 35_000,
+                /* maxBufferMs */ 120_000,
+                /* bufferForPlaybackMs */ 4_000,
+                /* bufferForPlaybackAfterRebufferMs */ 10_000
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -76,8 +76,8 @@ object StreamPlayerFactory {
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
 
         val liveSpeed = DefaultLivePlaybackSpeedControl.Builder()
-            .setFallbackMaxPlaybackSpeed(1.04f)
-            .setFallbackMinPlaybackSpeed(0.96f)
+            .setFallbackMaxPlaybackSpeed(1.03f)
+            .setFallbackMinPlaybackSpeed(0.97f)
             .build()
 
         val builder = ExoPlayer.Builder(context, renderersFactory)
@@ -107,7 +107,6 @@ object StreamPlayerFactory {
                 )
             } catch (_: Throwable) {
             }
-            // Reduce saltos de calidad bruscos en adaptativo
             try {
                 trackSelectionParameters = trackSelectionParameters
                     .buildUpon()
