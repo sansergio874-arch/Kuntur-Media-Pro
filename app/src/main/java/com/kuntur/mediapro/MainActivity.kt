@@ -22,11 +22,7 @@ class MainActivity : ComponentActivity() {
         player = try {
             StreamPlayerFactory.create(this)
         } catch (_: Throwable) {
-            try {
-                ExoPlayer.Builder(this).build()
-            } catch (_: Throwable) {
-                null
-            }
+            null
         }
         setContent {
             KunturMediaProTheme {
