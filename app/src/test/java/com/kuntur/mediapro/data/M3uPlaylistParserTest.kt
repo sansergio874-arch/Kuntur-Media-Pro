@@ -42,6 +42,20 @@ class M3uPlaylistParserTest {
     }
 
     @Test
+    fun preservesCommasInTitlesAndSupportsSingleQuotedMetadata() {
+        val playlist = """
+            #EXTM3U
+            #EXTINF:-1 tvg-logo='https://example.com/logo.png' tvg-name='Nombre alternativo',Noticias, Perú
+            https://example.com/peru.m3u8
+        """.trimIndent()
+
+        val item = M3uPlaylistParser.parse(playlist).single()
+
+        assertEquals("Noticias, Perú", item.title)
+        assertEquals("https://example.com/logo.png", item.logoUrl)
+    }
+
+    @Test
     fun ignoresDuplicatesAndEntriesWithoutNames() {
         val playlist = """
             #EXTM3U
