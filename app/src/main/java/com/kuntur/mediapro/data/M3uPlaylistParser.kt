@@ -22,8 +22,8 @@ object M3uPlaylistParser {
             val line = input.readLine()?.trim() ?: break
             when {
                 line.startsWith("#EXTINF", ignoreCase = true) -> {
-                    val displayName = line.substringAfterLast(',', "").trim()
-                    title = displayName.ifBlank { attribute(line, "tvg-name") ?: attribute(line, "name") }
+                    val displayName = displayName(line)
+                    title = displayName.ifBlank { attribute(line, "tvg-name") ?: attribute(line, "name").orEmpty() }
                     logo = attribute(line, "tvg-logo")
                 }
                 line.isNotBlank() && !line.startsWith("#") &&
@@ -57,8 +57,26 @@ object M3uPlaylistParser {
         return digest.take(12).joinToString("") { "%02x".format(it) }
     }
 
+    /** Finds the title separator comma without splitting commas inside quoted attributes. */
+    private fun displayName(line: String): String {
+        var quote: Char? = null
+        for (index in line.indices) {
+            val char = line[index]
+            if (quote == null && (char == '"' || char == '\'')) {
+                quote = char
+            } else if (quote == char) {
+                quote = null
+            } else if (char == ',' && quote == null) {
+                return line.substring(index + 1).trim()
+            }
+        }
+        return ""
+    }
+
     private fun attribute(line: String, name: String): String? {
-        val regex = Regex(Regex.escape(name) + "=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
-        return regex.find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
+        val regex = Regex(Regex.escape(name) + "=(?:\"([^\"]*)\"|'([^']*)')", RegexOption.IGNORE_CASE)
+        val match = regex.find(line) ?: return null
+        return (match.groupValues.getOrNull(1).orEmpty().ifBlank { match.groupValues.getOrNull(2).orEmpty() })
+            .takeIf { it.isNotBlank() }
     }
 }
