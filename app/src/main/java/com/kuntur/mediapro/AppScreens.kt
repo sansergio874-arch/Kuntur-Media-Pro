@@ -239,7 +239,7 @@ fun HomeHub(onRadios: () -> Unit, onChannels: () -> Unit, onMovies: () -> Unit) 
         Text("Kuntur Media Pro", color = GoldS, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text("Tu entretenimiento en un solo lugar", color = Color.White.copy(0.65f), fontSize = 14.sp)
         Spacer(Modifier.height(28.dp))
-        SectionCard("TV en vivo e IPTV", "${MediaRepository.channels.size} canales + tus listas M3U", Icons.Default.Tv, onChannels)
+        SectionCard("TV en vivo e IPTV", "${channels.size} canales + tus listas M3U", Icons.Default.Tv, onChannels)
         Spacer(Modifier.height(12.dp))
         SectionCard("Radios", "${MediaRepository.radios.size} emisoras en directo", Icons.Default.Radio, onRadios)
         Spacer(Modifier.height(12.dp))
@@ -305,7 +305,7 @@ fun CategoryScreen(
                 }
                 Spacer(Modifier.height(14.dp))
             }
-            items(items, key = { it.id }) { MediaRow(it, onPlay) }
+            items(items, key = { it.id }, contentType = { it.category }) { MediaRow(it, onPlay) }
             item { Spacer(Modifier.height(28.dp)) }
         }
     }
