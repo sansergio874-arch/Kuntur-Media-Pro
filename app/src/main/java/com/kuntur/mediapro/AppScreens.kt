@@ -82,20 +82,25 @@ fun AppRoot(player: ExoPlayer) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
     LaunchedEffect(Unit) {
-        delay(1400)
+        delay(1200)
         showSplash = false
     }
 
-    // Restaurar listas M3U guardadas y clasificar
+    // Restaurar listas M3U de forma segura (no cierra la app si una falla)
     LaunchedEffect(Unit) {
-        val sources = PlaylistCatalog.savedSources(context)
-        sources.forEach { source ->
-            try {
-                val imported = loadPlaylist(source)
-                PlaylistCatalog.importItems(imported)
-                yield()
-            } catch (_: Exception) {
+        try {
+            val sources = PlaylistCatalog.savedSources(context)
+            sources.forEach { source ->
+                try {
+                    val imported = loadPlaylist(source)
+                    PlaylistCatalog.importItems(imported)
+                    yield()
+                } catch (_: Throwable) {
+                    // Continuar con las demás fuentes
+                }
             }
+        } catch (_: Throwable) {
+            // No bloquear el arranque
         }
     }
 
@@ -268,7 +273,7 @@ fun AppRoot(player: ExoPlayer) {
             }
             currentItem = item
             section = AppSection.PLAYER
-            PlayerHolder.ensureService(context)
+            try { PlayerHolder.ensureService(context) } catch (_: Throwable) {}
             try {
                 val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
                 val mi = DrmHelper.createClearMediaItem(item.streamUrl, item.title, isLive = live)
@@ -294,8 +299,7 @@ fun AppRoot(player: ExoPlayer) {
                         try {
                             player.stop()
                             player.clearMediaItems()
-                        } catch (_: Exception) {
-                        }
+                        } catch (_: Exception) {}
                         section = AppSection.BROWSE
                     },
                     onToggleFavorite = { FavoritesManager.toggle(context, item.id) }
@@ -445,7 +449,6 @@ fun HomeHub(
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onClearPlaylists: () -> Unit) {
-    val context = LocalContext.current
     var showClearConfirm by remember { mutableStateOf(false) }
     val version = "2.9"
 
@@ -763,8 +766,8 @@ private class LimitedPlaylistInputStream(
 private suspend fun loadPlaylist(sourceUrl: String): List<MediaItem> = withContext(Dispatchers.IO) {
     require(sourceUrl.startsWith("https://", ignoreCase = true)) { "La URL debe usar HTTPS." }
     val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 20000
-        readTimeout = 30000
+        connectTimeout = 15000
+        readTimeout = 20000
         instanceFollowRedirects = true
         requestMethod = "GET"
         setRequestProperty("User-Agent", "KunturMediaPro/2.9")
