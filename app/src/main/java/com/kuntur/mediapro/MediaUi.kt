@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -69,7 +70,6 @@ fun MediaRow(
             Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Área principal: reproduce
             Row(
                 Modifier
                     .weight(1f)
@@ -88,7 +88,6 @@ fun MediaRow(
                 }
             }
 
-            // Botón favorito
             IconButton(
                 onClick = {
                     isFav = FavoritesManager.toggle(context, item.id)
@@ -102,7 +101,6 @@ fun MediaRow(
                 )
             }
 
-            // Botón reproducir / estado
             IconButton(onClick = { onPlay(item) }) {
                 when {
                     item.isPremium && unlocked -> Icon(Icons.Default.PlayArrow, null, tint = Color(0xFF4CAF50))
@@ -120,6 +118,7 @@ fun PlayerScreen(
     item: MediaItem,
     player: ExoPlayer,
     onBack: () -> Unit,
+    onStop: () -> Unit = onBack,
     onToggleFavorite: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -172,8 +171,8 @@ fun PlayerScreen(
     }
 
     val sectionLabel = when (item.category.lowercase()) {
-        "radio" -> "Reproductor de radio"
-        "tv" -> "Reproductor de canales"
+        "radio" -> "Reproductor de radio · segundo plano activo"
+        "tv" -> "Reproductor de canales · segundo plano activo"
         else -> "Reproductor de películas"
     }
 
@@ -182,7 +181,6 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Barra superior
         Row(
             Modifier
                 .fillMaxWidth()
@@ -224,7 +222,6 @@ fun PlayerScreen(
             }
         }
 
-        // Área de video / audio
         Box(
             modifier = if (isVideo) {
                 Modifier
@@ -313,16 +310,14 @@ fun PlayerScreen(
             }
         }
 
-        // Controles extra visibles
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(NavyUi)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Play / Pause grande
             FilledIconButton(
                 onClick = {
                     if (player.isPlaying) player.pause() else player.play()
@@ -336,17 +331,29 @@ fun PlayerScreen(
                 )
             }
 
+            OutlinedButton(
+                onClick = onStop,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldUi),
+                border = ButtonDefaults.outlinedButtonBorder.copy(
+                    brush = androidx.compose.ui.graphics.SolidColor(GoldUi)
+                )
+            ) {
+                Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Detener")
+            }
+
             val status = when {
                 errorMsg != null -> "Error"
                 isBuffering -> "Cargando…"
-                isPlaying -> "Reproduciendo"
+                isPlaying -> if (isRadio) "En segundo plano" else "Reproduciendo"
                 else -> "Pausado"
             }
             Text(
                 status,
                 color = Color.White.copy(0.75f),
                 fontSize = 13.sp,
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+                modifier = Modifier.weight(1f)
             )
 
             if (!isRadio) {
@@ -360,6 +367,12 @@ fun PlayerScreen(
         }
 
         if (isRadio) {
+            Text(
+                "Puede minimizar la app: la radio seguirá sonando. Use la notificación del sistema o Detener.",
+                color = Color.White.copy(0.5f),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
             Spacer(Modifier.weight(1f))
         }
     }
