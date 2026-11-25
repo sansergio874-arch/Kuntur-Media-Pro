@@ -140,7 +140,6 @@ fun PlayerScreen(
     val isRadio = item.category.equals("Radio", ignoreCase = true)
     val isVideo = !isRadio
 
-    // Rotar pantalla al entrar/salir de pantalla completa
     LaunchedEffect(isFullscreen) {
         try {
             activity?.requestedOrientation = if (isFullscreen) {
@@ -151,12 +150,9 @@ fun PlayerScreen(
         } catch (_: Throwable) {}
     }
 
-    // Restaurar orientación al salir de la pantalla
     DisposableEffect(Unit) {
         onDispose {
-            try {
-                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            } catch (_: Throwable) {}
+            try { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT } catch (_: Throwable) {}
         }
     }
 
@@ -242,13 +238,8 @@ fun PlayerScreen(
                     .pointerInput(item.id) { detectTransformGestures { _, _, zoom, _ -> videoScale = (videoScale * zoom).coerceIn(1f, 3f) } }
                     .pointerInput(isFullscreen) {
                         detectDragGestures { _, dragAmount ->
-                            // Deslizar hacia ABAJO = entrar en pantalla completa
-                            // Deslizar hacia ARRIBA = salir de pantalla completa
-                            if (dragAmount.y > 50 && !isFullscreen) {
-                                isFullscreen = true
-                            } else if (dragAmount.y < -50 && isFullscreen) {
-                                isFullscreen = false
-                            }
+                            if (dragAmount.y > 50 && !isFullscreen) isFullscreen = true
+                            else if (dragAmount.y < -50 && isFullscreen) isFullscreen = false
                         }
                     }
                     .graphicsLayer { scaleX = videoScale; scaleY = videoScale }
@@ -297,10 +288,10 @@ fun PlayerScreen(
                 }
             }
             if (isRadio) {
-                Text("Puede minimizar la app: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                Text("Puede minimizar la aplicación: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Deslice hacia abajo para pantalla completa (gira a horizontal).", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Deslice hacia abajo para pantalla completa. La pantalla girará a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
