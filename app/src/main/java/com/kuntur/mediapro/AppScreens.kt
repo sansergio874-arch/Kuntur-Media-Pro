@@ -188,7 +188,7 @@ fun AppRoot(player: ExoPlayer) {
             subtitle = "${MediaRepository.radios.size} emisoras",
             icon = Icons.Default.Radio,
             items = MediaRepository.radios,
-            onPlay = ::startPlayback,
+            onPlay = { startPlayback(it) },
             onBack = { section = AppSection.HOME }
         )
         AppSection.CHANNELS -> CategoryScreen(
@@ -196,7 +196,7 @@ fun AppRoot(player: ExoPlayer) {
             subtitle = "${channels.size} canales · listas M3U/M3U8",
             icon = Icons.Default.Tv,
             items = channels,
-            onPlay = ::startPlayback,
+            onPlay = { startPlayback(it) },
             onBack = { section = AppSection.HOME },
             onImportPlaylist = { showPlaylistDialog = true }
         )
@@ -205,7 +205,7 @@ fun AppRoot(player: ExoPlayer) {
             subtitle = "${MediaRepository.movies.size} títulos disponibles",
             icon = Icons.Default.Movie,
             items = MediaRepository.movies,
-            onPlay = ::startPlayback,
+            onPlay = { startPlayback(it) },
             onBack = { section = AppSection.HOME }
         )
         AppSection.HOME -> HomeHub(
