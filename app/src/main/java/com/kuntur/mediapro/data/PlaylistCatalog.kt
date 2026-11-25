@@ -70,4 +70,15 @@ object PlaylistCatalog {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return prefs.getStringSet("sources", emptySet())?.toList().orEmpty()
     }
+
+    /** Elimina las listas importadas y restaura el catálogo base. */
+    fun clearImported(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        radios.clear()
+        channels.clear()
+        movies.clear()
+        radios.addAll(MediaRepository.radios)
+        channels.addAll(MediaRepository.channels)
+        movies.addAll(MediaRepository.movies)
+    }
 }
