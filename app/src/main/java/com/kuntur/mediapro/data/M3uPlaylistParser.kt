@@ -39,7 +39,7 @@ object M3uPlaylistParser {
     }
 
     private fun attribute(line: String, name: String): String? {
-        val regex = Regex("(?i)(?:^|\\\\s)" + Regex.escape(name) + "=\"([^\"]*)\"")
+        val regex = Regex(Regex.escape(name) + "=\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         return regex.find(line)?.groupValues?.getOrNull(1)?.takeIf { it.isNotBlank() }
     }
 }
