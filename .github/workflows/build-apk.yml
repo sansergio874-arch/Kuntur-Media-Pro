@@ -37,22 +37,39 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
+          set -o pipefail
           if [ -f gradlew ]; then
-            ./gradlew assembleDebug --stacktrace --info 2>&1 | tee build.log
+            ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
           else
-            gradle assembleDebug --stacktrace --info 2>&1 | tee build.log
+            gradle assembleDebug --stacktrace 2>&1 | tee build.log
           fi
-          # Mostrar errores si falló
-          if [ $? -ne 0 ]; then
-            echo "=== ERRORES DE COMPILACIÓN ==="
-            grep -E "error:|e: |FAILED|Exception" build.log | head -50
-            exit 1
+          echo "Build exit code: $?"
+
+      - name: Show build errors on failure
+        if: failure()
+        run: |
+          echo "=== ERRORES DE COMPILACIÓN ==="
+          if [ -f build.log ]; then
+            grep -E "error:|e: |FAILED|Exception|What went wrong" build.log | head -80 || echo "No se encontraron líneas de error específicas"
+            echo "=== Últimas 100 líneas del log ==="
+            tail -100 build.log
+          else
+            echo "No hay build.log"
           fi
 
       - name: Validate APK
         run: |
           set -euo pipefail
-          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          if [ ! -d app/build/outputs/apk/debug ]; then
+            echo "ERROR: Directorio de APK no existe. El build falló."
+            exit 1
+          fi
+          APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
+          if [ -z "$APK" ]; then
+            echo "ERROR: No se generó ningún APK."
+            ls -la app/build/outputs/apk/debug/ || true
+            exit 1
+          fi
           echo "=== Validando APK: $APK ==="
           ls -lh "$APK"
 
