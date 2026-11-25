@@ -11,8 +11,8 @@ android {
         applicationId = "com.kuntur.mediapro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 26
-        versionName = "2.6"
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.coerceAtLeast(27) ?: 27
+        versionName = "2.7.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     buildTypes {
