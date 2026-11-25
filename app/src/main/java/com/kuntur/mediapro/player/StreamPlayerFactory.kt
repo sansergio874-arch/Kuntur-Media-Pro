@@ -23,16 +23,7 @@ object StreamPlayerFactory {
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.6"
 
-    fun create(context: Context): ExoPlayer {
-        return try {
-            createConfigured(context)
-        } catch (_: Throwable) {
-            ExoPlayer.Builder(context).build().apply {
-                playWhenReady = true
-                volume = 1f
-            }
-        }
-    }
+    fun create(context: Context): ExoPlayer = createConfigured(context)
 
     private fun createConfigured(context: Context): ExoPlayer {
         val httpFactory = DefaultHttpDataSource.Factory()
