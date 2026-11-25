@@ -57,15 +57,9 @@ object MediaRepository {
         MediaItem("m1", "Big Buck Bunny", "Película",
             "https://uploads.video-commander.com/sample/BigBuckBunny.mp4", false,
             "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/220px-Big_buck_bunny_poster_big.jpg"),
-        MediaItem("m2", "Sintel (trailer)", "Película",
-            "https://download.blender.org/durian/trailer/sintel_trailer-1080p.mp4", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Sintel_poster.jpg/220px-Sintel_poster.jpg"),
         MediaItem("m3", "Elephants Dream", "Película",
             "https://archive.org/download/ElephantsDream/ed_hd.mp4", false,
             "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Elephants_Dream_s5_both.jpg/220px-Elephants_Dream_s5_both.jpg"),
-        MediaItem("m4", "Tears of Steel (trailer)", "Película",
-            "https://download.blender.org/mango/trailer_tears_of_steel_1080p.mov", false,
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/Tears_of_Steel_poster.jpg/220px-Tears_of_Steel_poster.jpg"),
 
         // Clasicos dominio publico
         MediaItem("m5", "Night of the Living Dead", "Película",
@@ -97,13 +91,9 @@ object MediaRepository {
         MediaItem("m17", "Steamboat Bill Jr.", "Película",
             "https://archive.org/download/SteamboatBillJr/SteamboatBillJr.mp4", false, null),
         MediaItem("m18", "Metropolis (1927)", "Película",
-            "https://archive.org/download/Metropolis1927RestoredVersion/Metropolis.mp4", true, null),
+            "https://archive.org/download/Metropolis1927RestoredVersion/Metropolis.mp4", false, null),
         MediaItem("m19", "Charade (1963)", "Película",
-            "https://archive.org/download/Charade1963/Charade1963.mp4", true, null),
-        MediaItem("m20", "Flower (demo corto)", "Película",
-            "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", false, null),
-        MediaItem("m21", "Big Buck Bunny 360p (corto)", "Película",
-            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4", false, null)
+            "https://archive.org/download/Charade1963/Charade1963.mp4", false, null),
     )
 
     fun all() = radios + channels + movies
