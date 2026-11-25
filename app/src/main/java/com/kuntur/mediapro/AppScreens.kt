@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -123,7 +123,7 @@ fun AppRoot(player: ExoPlayer) {
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.Translate, null, tint = GoldS) },
+                    icon = { Icon(Icons.Default.Mic, null, tint = GoldS) },
                     label = { Text("Traductor", color = Color.White) },
                     selected = section == AppSection.TRANSLATOR,
                     onClick = { section = AppSection.TRANSLATOR; scope.launch { drawerState.close() } },
