@@ -19,9 +19,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Remove obsolete local plan/payment records from previous app versions.
-        getSharedPreferences("kuntur_prefs", MODE_PRIVATE).edit().clear().apply()
-        getSharedPreferences("kuntur_transactions", MODE_PRIVATE).edit().clear().apply()
         player = try {
             StreamPlayerFactory.create(this)
         } catch (_: Throwable) {
