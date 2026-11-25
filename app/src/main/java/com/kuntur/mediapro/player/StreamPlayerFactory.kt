@@ -16,13 +16,13 @@ import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 
 /**
- * ExoPlayer optimizado para reducir cortes: buffer amplio, timeouts generosos
- * y sin reintentos automáticos (el usuario decide reintentar).
+ * ExoPlayer optimizado: buffer amplio, sin pausa automática en llamadas,
+ * y sin reintentos automáticos.
  */
 object StreamPlayerFactory {
 
     private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.8"
+        "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36 Kuntur/2.9"
 
     fun create(context: Context): ExoPlayer {
         return try {
@@ -45,7 +45,6 @@ object StreamPlayerFactory {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
-        // Sin reintentos automáticos: se informa el error al usuario.
         val errorPolicy: LoadErrorHandlingPolicy = object : DefaultLoadErrorHandlingPolicy(0) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
                 return C.TIME_UNSET
@@ -60,13 +59,12 @@ object StreamPlayerFactory {
             .setDataSourceFactory(dataSourceFactory)
             .setLoadErrorHandlingPolicy(errorPolicy)
 
-        // Buffer más amplio para minimizar cortes en redes inestables
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs */ 35_000,
-                /* maxBufferMs */ 120_000,
-                /* bufferForPlaybackMs */ 4_000,
-                /* bufferForPlaybackAfterRebufferMs */ 10_000
+                35_000,
+                120_000,
+                4_000,
+                10_000
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -86,12 +84,11 @@ object StreamPlayerFactory {
             .setLivePlaybackSpeedControl(liveSpeed)
             .setSeekBackIncrementMs(10_000)
             .setSeekForwardIncrementMs(10_000)
-            .setHandleAudioBecomingNoisy(true)
+            .setHandleAudioBecomingNoisy(false) // no pausar al desconectar auriculares
 
         try {
             builder.setWakeMode(C.WAKE_MODE_NETWORK)
-        } catch (_: Throwable) {
-        }
+        } catch (_: Throwable) {}
 
         return builder.build().apply {
             playWhenReady = true
@@ -103,17 +100,15 @@ object StreamPlayerFactory {
                         .setUsage(C.USAGE_MEDIA)
                         .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                         .build(),
-                    /* handleAudioFocus = */ true
+                    /* handleAudioFocus = */ false // no pausar durante llamadas
                 )
-            } catch (_: Throwable) {
-            }
+            } catch (_: Throwable) {}
             try {
                 trackSelectionParameters = trackSelectionParameters
                     .buildUpon()
                     .setForceHighestSupportedBitrate(false)
                     .build()
-            } catch (_: Throwable) {
-            }
+            } catch (_: Throwable) {}
         }
     }
 
