@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,7 +53,6 @@ import com.kuntur.mediapro.ui.LogoImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 
 private val NavyUi = Color(0xFF0A1628)
 private val CardBgUi = Color(0xFF1A2D45)
@@ -77,17 +75,6 @@ fun applyQuality(player: ExoPlayer, quality: VideoQuality) {
             .setForceHighestSupportedBitrate(quality == VideoQuality.MAX)
             .build()
         player.trackSelectionParameters = params
-    } catch (_: Throwable) {}
-}
-
-fun adjustBrightness(activity: Activity?, delta: Float) {
-    try {
-        val window = activity?.window ?: return
-        val params = window.attributes
-        val current = if (params.screenBrightness < 0) 0.5f else params.screenBrightness
-        val newVal = (current + delta).coerceIn(0.05f, 1f)
-        params.screenBrightness = newVal
-        window.attributes = params
     } catch (_: Throwable) {}
 }
 
@@ -148,7 +135,6 @@ fun PlayerScreen(
     var isFullscreen by remember { mutableStateOf(false) }
     var currentQuality by remember { mutableStateOf(VideoQuality.HIGH) }
     var showQualityMenu by remember { mutableStateOf(false) }
-    var brightnessLabel by remember { mutableStateOf("") }
 
     val isRadio = item.category.equals("Radio", ignoreCase = true)
     val isVideo = !isRadio
@@ -249,40 +235,8 @@ fun PlayerScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .pointerInput(item.id) { detectTransformGestures { _, _, zoom, _ -> videoScale = (videoScale * zoom).coerceIn(1f, 3f) } }
-                    .pointerInput(isFullscreen) {
-                        detectDragGestures { change, dragAmount ->
-                            val y = change.position.y
-                            val x = change.position.x
-                            val width = size.width.toFloat()
-                            if (y > 100f && abs(dragAmount.y) > 10f) {
-                                val delta = if (dragAmount.y > 0) -0.04f else 0.04f
-                                if (x < width / 2f) {
-                                    adjustBrightness(activity, delta)
-                                    brightnessLabel = if (delta < 0) "Brillo −" else "Brillo +"
-                                } else {
-                                    adjustBrightness(activity, -delta)
-                                    brightnessLabel = if (delta < 0) "Brillo +" else "Brillo −"
-                                }
-                            }
-                            if (dragAmount.y > 60 && !isFullscreen) isFullscreen = true
-                            else if (dragAmount.y < -60 && isFullscreen) isFullscreen = false
-                        }
-                    }
                     .graphicsLayer { scaleX = videoScale; scaleY = videoScale }
             )
-
-            if (brightnessLabel.isNotBlank()) {
-                Text(
-                    brightnessLabel,
-                    color = GoldUi,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .background(Color.Black.copy(0.6f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
 
             if (isFullscreen) {
                 Row(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
@@ -330,7 +284,7 @@ fun PlayerScreen(
                 Text("Puede minimizar la aplicación: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Deslice hacia abajo para pantalla completa. Lados: brillo.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Use el botón para pantalla completa. La pantalla girará a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
