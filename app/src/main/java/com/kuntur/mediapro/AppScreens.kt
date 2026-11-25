@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import android.content.Context
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,6 +55,7 @@ fun AppRoot(player: ExoPlayer) {
     var playErrorMessage by remember { mutableStateOf<String?>(null) }
     val channels = remember { mutableStateListOf<MediaItem>().apply { addAll(MediaRepository.channels) } }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var playlistUrl by remember { mutableStateOf("") }
     var playlistMessage by remember { mutableStateOf<String?>(null) }
@@ -61,6 +64,24 @@ fun AppRoot(player: ExoPlayer) {
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(900)
         showSplash = false
+    }
+
+    // Restore previously added playlist sources after app restarts.
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("kuntur_iptv_sources", Context.MODE_PRIVATE)
+        val savedSources = prefs.getStringSet("sources", emptySet())?.toList().orEmpty()
+        val knownUrls = channels.mapTo(HashSet()) { it.streamUrl }
+        savedSources.forEach { source ->
+            try {
+                val restored = loadPlaylist(source)
+                restored.forEachIndexed { index, item ->
+                    if (knownUrls.add(item.streamUrl)) channels.add(item)
+                    if (index % 200 == 0) yield()
+                }
+            } catch (_: Exception) {
+                // Keep the rest of the app usable if a saved provider is offline.
+            }
+        }
     }
 
     if (showSplash) {
@@ -105,33 +126,11 @@ fun AppRoot(player: ExoPlayer) {
                         playlistMessage = null
                         scope.launch {
                             try {
-                                val imported = withContext(Dispatchers.IO) {
-                                    val connection = (URL(playlistUrl.trim()).openConnection() as HttpURLConnection).apply {
-                                        connectTimeout = 20000
-                                        readTimeout = 30000
-                                        instanceFollowRedirects = true
-                                        requestMethod = "GET"
-                                        setRequestProperty("User-Agent", "KunturMediaPro/2.9")
-                                        setRequestProperty("Accept", "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*")
-                                    }
-                                    try {
-                                        require(connection.responseCode in 200..299) {
-                                            "El servidor respondió HTTP ${connection.responseCode}."
-                                        }
-                                        val maxBytes = 256L * 1024L * 1024L
-                                        require(connection.contentLengthLong <= 0L || connection.contentLengthLong <= maxBytes) {
-                                            "La lista supera el límite de 256 MB."
-                                        }
-                                        connection.inputStream.use { input ->
-                                            val limited = LimitedPlaylistInputStream(input, maxBytes)
-                                            InputStreamReader(limited, Charsets.UTF_8).buffered().use { reader ->
-                                                M3uPlaylistParser.parse(reader)
-                                            }
-                                        }
-                                    } finally {
-                                        connection.disconnect()
-                                    }
-                                }
+                                val imported = loadPlaylist(playlistUrl.trim())
+                                val sourcePrefs = context.getSharedPreferences("kuntur_iptv_sources", Context.MODE_PRIVATE)
+                                val savedSources = sourcePrefs.getStringSet("sources", emptySet()).orEmpty().toMutableSet()
+                                savedSources.add(playlistUrl.trim())
+                                sourcePrefs.edit().putStringSet("sources", savedSources).apply()
                                 val existing = channels.mapTo(HashSet()) { it.streamUrl }
                                 val fresh = imported.filter { existing.add(it.streamUrl) }
                                 // Insertar en grupos pequeños para que Compose pueda dibujar y responder entre lotes.
@@ -334,5 +333,36 @@ private class LimitedPlaylistInputStream(
     private fun countBytes(count: Int) {
         bytesRead += count
         require(bytesRead <= maxBytes) { "La lista supera el límite de 256 MB." }
+    }
+}
+
+
+/** Downloads and parses a user-supplied playlist off the main thread with a hard byte limit. */
+private suspend fun loadPlaylist(sourceUrl: String): List<MediaItem> = withContext(Dispatchers.IO) {
+    require(sourceUrl.startsWith("https://", ignoreCase = true)) { "La URL debe usar HTTPS." }
+    val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 20000
+        readTimeout = 30000
+        instanceFollowRedirects = true
+        requestMethod = "GET"
+        setRequestProperty("User-Agent", "KunturMediaPro/2.9")
+        setRequestProperty("Accept", "audio/x-mpegurl, application/vnd.apple.mpegurl, text/plain, */*")
+    }
+    try {
+        require(connection.responseCode in 200..299) {
+            "El servidor respondió HTTP ${connection.responseCode}."
+        }
+        val maxBytes = 256L * 1024L * 1024L
+        require(connection.contentLengthLong <= 0L || connection.contentLengthLong <= maxBytes) {
+            "La lista supera el límite de 256 MB."
+        }
+        connection.inputStream.use { input ->
+            val limited = LimitedPlaylistInputStream(input, maxBytes)
+            InputStreamReader(limited, Charsets.UTF_8).buffered().use { reader ->
+                M3uPlaylistParser.parse(reader)
+            }
+        }
+    } finally {
+        connection.disconnect()
     }
 }
