@@ -55,16 +55,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             KunturMediaProTheme {
-                Surface(Modifier.fillMaxSize(), color = Color(0xFF0A1628)) {
+                Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A1628)) {
                     val p = playerState ?: try { PlayerHolder.player } catch (_: Throwable) { null }
                     if (p != null) {
-                        try {
-                            AppRoot(p)
-                        } catch (e: Throwable) {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("Error al cargar la interfaz", color = Color.White)
-                            }
-                        }
+                        AppRoot(p)
                     } else {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Error al iniciar el reproductor", color = Color.White)
