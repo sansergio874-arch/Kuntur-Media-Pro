@@ -34,6 +34,9 @@ jobs:
           if [ -f gradlew ]; then chmod +x gradlew; fi
 
       - name: Build Debug APK
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
       - name: Upload APK Artifact
@@ -47,9 +50,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: success() && github.ref == 'refs/heads/main'
         with:
-          tag_name: v2.7.${{ github.run_number }}
-          name: Kuntur Media Pro v2.7.${{ github.run_number }}
-          body: APK Kuntur Media Pro generado y compilado automáticamente por GitHub Actions.
+          tag_name: v2.9.${{ github.run_number }}
+          name: Kuntur Media Pro v2.9.${{ github.run_number }}
+          body: APK Kuntur Media Pro con pagos/activación y reproducción en segundo plano.
           files: app/build/outputs/apk/debug/*.apk
           draft: false
           prerelease: false
