@@ -223,6 +223,7 @@ fun AppRoot(player: ExoPlayer) {
             onBack = { section = AppSection.HOME }
         )
         AppSection.HOME -> HomeHub(
+            channelCount = channels.size,
             onRadios = { section = AppSection.RADIOS },
             onChannels = { section = AppSection.CHANNELS },
             onMovies = { section = AppSection.MOVIES }
@@ -231,14 +232,14 @@ fun AppRoot(player: ExoPlayer) {
 }
 
 @Composable
-fun HomeHub(onRadios: () -> Unit, onChannels: () -> Unit, onMovies: () -> Unit) {
+fun HomeHub(channelCount: Int, onRadios: () -> Unit, onChannels: () -> Unit, onMovies: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS))).padding(20.dp)
     ) {
         Text("Kuntur Media Pro", color = GoldS, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text("Tu entretenimiento en un solo lugar", color = Color.White.copy(0.65f), fontSize = 14.sp)
         Spacer(Modifier.height(28.dp))
-        SectionCard("TV en vivo e IPTV", "${channels.size} canales + tus listas M3U", Icons.Default.Tv, onChannels)
+        SectionCard("TV en vivo e IPTV", "$channelCount canales + tus listas M3U", Icons.Default.Tv, onChannels)
         Spacer(Modifier.height(12.dp))
         SectionCard("Radios", "${MediaRepository.radios.size} emisoras en directo", Icons.Default.Radio, onRadios)
         Spacer(Modifier.height(12.dp))
