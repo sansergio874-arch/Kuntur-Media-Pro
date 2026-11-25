@@ -1,1 +1,1 @@
-build-translator
+build-offline-translator
