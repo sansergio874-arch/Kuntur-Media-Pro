@@ -14,10 +14,9 @@ import androidx.media3.exoplayer.DefaultLivePlaybackSpeedControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
-import java.io.IOException
 
 /**
- * ExoPlayer optimizado para menos cortes: buffers amplios, reintentos y wake de red.
+ * ExoPlayer con buffer amplio, reproducción estable y sin reintentos automáticos.
  */
 object StreamPlayerFactory {
 
@@ -45,19 +44,14 @@ object StreamPlayerFactory {
 
         val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
 
-        // Más reintentos ante fallos de red / segmento HLS
-        val errorPolicy: LoadErrorHandlingPolicy = object : DefaultLoadErrorHandlingPolicy(8) {
+        // No repetir solicitudes fallidas: informar el error al usuario.
+        val errorPolicy: LoadErrorHandlingPolicy = object : DefaultLoadErrorHandlingPolicy(0) {
             override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                val e = loadErrorInfo.exception
-                if (e is IOException) {
-                    // 1s, 2s, 3s... hasta tope
-                    return (1000L * (loadErrorInfo.errorCount.coerceAtMost(6))).coerceAtMost(8_000L)
-                }
-                return super.getRetryDelayMsFor(loadErrorInfo)
+                return C.TIME_UNSET
             }
 
             override fun getMinimumLoadableRetryCount(dataType: Int): Int {
-                return 8
+                return 0
             }
         }
 
@@ -133,7 +127,7 @@ object StreamPlayerFactory {
         return when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-                "Red inestable. Reintente; el buffer se ampliará al cargar."
+                "No se pudo conectar con la fuente. Compruebe la conexión o el enlace."
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
                 "El servidor rechazó el stream."
             PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
