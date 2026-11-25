@@ -13,20 +13,22 @@ object PlaylistCatalog {
     private const val PREFS = "kuntur_iptv_sources"
 
     val radios: SnapshotStateList<MediaItem> = mutableStateListOf<MediaItem>().apply {
-        addAll(MediaRepository.radios)
+        try { addAll(MediaRepository.radios) } catch (_: Throwable) {}
     }
     val channels: SnapshotStateList<MediaItem> = mutableStateListOf<MediaItem>().apply {
-        addAll(MediaRepository.channels)
+        try { addAll(MediaRepository.channels) } catch (_: Throwable) {}
     }
     val movies: SnapshotStateList<MediaItem> = mutableStateListOf<MediaItem>().apply {
-        addAll(MediaRepository.movies)
+        try { addAll(MediaRepository.movies) } catch (_: Throwable) {}
     }
 
     fun knownUrls(): HashSet<String> {
         val set = HashSet<String>()
-        radios.forEach { set.add(it.streamUrl) }
-        channels.forEach { set.add(it.streamUrl) }
-        movies.forEach { set.add(it.streamUrl) }
+        try {
+            radios.forEach { set.add(it.streamUrl) }
+            channels.forEach { set.add(it.streamUrl) }
+            movies.forEach { set.add(it.streamUrl) }
+        } catch (_: Throwable) {}
         return set
     }
 
@@ -40,45 +42,57 @@ object PlaylistCatalog {
         var c = 0
         var m = 0
         items.forEach { item ->
-            if (!existing.add(item.streamUrl)) return@forEach
-            when (item.category.lowercase()) {
-                "radio" -> {
-                    radios.add(item)
-                    r++
+            try {
+                if (!existing.add(item.streamUrl)) return@forEach
+                when (item.category.lowercase()) {
+                    "radio" -> {
+                        radios.add(item)
+                        r++
+                    }
+                    "película", "pelicula" -> {
+                        movies.add(item)
+                        m++
+                    }
+                    else -> {
+                        channels.add(item.copy(category = "TV"))
+                        c++
+                    }
                 }
-                "película", "pelicula" -> {
-                    movies.add(item)
-                    m++
-                }
-                else -> {
-                    channels.add(item.copy(category = "TV"))
-                    c++
-                }
+            } catch (_: Throwable) {
+                // Ignorar entradas individuales que fallen
             }
         }
         return Triple(r, c, m)
     }
 
     fun saveSource(context: Context, url: String) {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val set = prefs.getStringSet("sources", emptySet()).orEmpty().toMutableSet()
-        set.add(url.trim())
-        prefs.edit().putStringSet("sources", set).apply()
+        try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val set = prefs.getStringSet("sources", emptySet()).orEmpty().toMutableSet()
+            set.add(url.trim())
+            prefs.edit().putStringSet("sources", set).apply()
+        } catch (_: Throwable) {}
     }
 
     fun savedSources(context: Context): List<String> {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return prefs.getStringSet("sources", emptySet())?.toList().orEmpty()
+        return try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.getStringSet("sources", emptySet())?.toList().orEmpty()
+        } catch (_: Throwable) {
+            emptyList()
+        }
     }
 
     /** Elimina las listas importadas y restaura el catálogo base. */
     fun clearImported(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
-        radios.clear()
-        channels.clear()
-        movies.clear()
-        radios.addAll(MediaRepository.radios)
-        channels.addAll(MediaRepository.channels)
-        movies.addAll(MediaRepository.movies)
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+            radios.clear()
+            channels.clear()
+            movies.clear()
+            radios.addAll(MediaRepository.radios)
+            channels.addAll(MediaRepository.channels)
+            movies.addAll(MediaRepository.movies)
+        } catch (_: Throwable) {}
     }
 }
