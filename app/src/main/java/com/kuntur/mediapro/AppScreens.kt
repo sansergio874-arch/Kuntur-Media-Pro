@@ -46,11 +46,8 @@ private val GoldS = Color(0xFFE8B923)
 
 enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES }
 
-fun canAccess(context: android.content.Context, item: MediaItem): Boolean {
-    if (!item.isPremium) return true
-    val plan = PurchaseManager.getCurrentPlan(context)
-    return PurchaseManager.isApproved(context) && plan != "free"
-}
+fun canAccess(context: android.content.Context, item: MediaItem): Boolean =
+    PurchaseManager.canAccess(context, item)
 
 @Composable
 fun AppRoot(player: ExoPlayer) {
@@ -117,12 +114,12 @@ fun AppRoot(player: ExoPlayer) {
 
     fun startPlayback(item: MediaItem) {
         if (!canAccess(context, item)) {
-            accessDeniedMessage = "Contenido Premium. Pague por Yape 955238172 y solicite activación."
+            accessDeniedMessage =
+                "Contenido Premium. Elija un plan, pague por Yape ${com.kuntur.mediapro.billing.BillingConfig.YAPE_NUMBER} indicando su código y espere la activación."
             return
         }
         currentItem = item
         section = AppSection.PLAYER
-        // Activa el servicio para notificación y reproducción en segundo plano
         PlayerHolder.ensureService(context)
         try {
             val live = DrmHelper.isLikelyLiveOrRadio(item.streamUrl, item.category)
@@ -141,18 +138,10 @@ fun AppRoot(player: ExoPlayer) {
     when (section) {
         AppSection.PLAYER -> if (currentItem != null) {
             val item = currentItem!!
-            val isRadio = item.category.equals("Radio", ignoreCase = true)
             PlayerScreen(
                 item = item,
                 player = player,
-                onBack = {
-                    // Radio/TV: seguir en segundo plano al volver.
-                    // Películas: se puede pausar si se prefiere; aquí se mantiene la sesión.
-                    if (!isRadio && !item.category.equals("TV", ignoreCase = true)) {
-                        // Opcional: no detener; la notificación permite controlar.
-                    }
-                    section = AppSection.BROWSE
-                },
+                onBack = { section = AppSection.BROWSE },
                 onStop = {
                     try {
                         player.stop()
@@ -233,7 +222,7 @@ fun HomeHub(
             colors = ButtonDefaults.buttonColors(containerColor = GoldS),
             shape = RoundedCornerShape(14.dp)
         ) {
-            Text("Planes y Yape 955238172", color = NavyS, fontWeight = FontWeight.Bold)
+            Text("Planes y Yape", color = NavyS, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -435,9 +424,7 @@ fun FavoritesScreen(
             Spacer(Modifier.width(6.dp))
             Text("Inicio", color = GoldS)
         }
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-        ) {
+        LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Favorite, null, tint = GoldS, modifier = Modifier.size(26.dp))

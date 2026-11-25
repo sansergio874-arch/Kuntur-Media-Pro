@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val supabaseUrl = (System.getenv("SUPABASE_URL") ?: "").replace("\"", "\\\"")
+val supabaseAnonKey = (System.getenv("SUPABASE_ANON_KEY") ?: "").replace("\"", "\\\"")
+
 android {
     namespace = "com.kuntur.mediapro"
     compileSdk = 34
@@ -14,9 +17,8 @@ android {
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull()?.coerceAtLeast(27) ?: 27
         versionName = "2.9.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
 
-        // Backend de pagos (Supabase). Configure secrets en GitHub Actions o deje vacío.
-        buildConfigField("String", "SUPABASE_URL", "\"${System.getenv("SUPABASE_URL") ?: "\"\"}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${System.getenv("SUPABASE_ANON_KEY") ?: "\"\"}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
