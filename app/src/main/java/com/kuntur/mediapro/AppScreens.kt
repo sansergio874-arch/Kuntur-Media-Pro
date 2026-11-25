@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,7 +61,7 @@ private val NavyMidS = Color(0xFF132337)
 private val CardBgS = Color(0xFF1A2D45)
 private val GoldS = Color(0xFFE8B923)
 
-enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES, SETTINGS }
+enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES, SETTINGS, TRANSLATOR }
 
 fun canAccess(context: Context, item: MediaItem): Boolean =
     PurchaseManager.canAccess(context, item)
@@ -119,6 +120,13 @@ fun AppRoot(player: ExoPlayer) {
                     label = { Text("Inicio", color = Color.White) },
                     selected = section == AppSection.HOME,
                     onClick = { section = AppSection.HOME; scope.launch { drawerState.close() } },
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Translate, null, tint = GoldS) },
+                    label = { Text("Traductor", color = Color.White) },
+                    selected = section == AppSection.TRANSLATOR,
+                    onClick = { section = AppSection.TRANSLATOR; scope.launch { drawerState.close() } },
                     modifier = Modifier.padding(horizontal = 12.dp)
                 )
                 NavigationDrawerItem(
@@ -262,6 +270,8 @@ fun AppRoot(player: ExoPlayer) {
                 onClearAll = { PlaylistCatalog.clearImported(context) },
                 onRemoveOne = { url -> PlaylistCatalog.removeSource(context, url) }
             )
+
+            AppSection.TRANSLATOR -> TranslatorScreen(onBack = { section = AppSection.HOME })
 
             AppSection.BROWSE -> BrowsePagerScreen(
                 initialPage = browseInitialPage,
