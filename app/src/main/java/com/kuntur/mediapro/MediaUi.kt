@@ -88,6 +88,9 @@ fun PlayerScreen(item: MediaItem, player: ExoPlayer, onBack: () -> Unit) {
     val isVideo = !isRadio
 
     DisposableEffect(player) {
+        isPlaying = player.isPlaying
+        isBuffering = player.playbackState == Player.STATE_BUFFERING ||
+            (player.playWhenReady && !player.isPlaying && player.playbackState != Player.STATE_ENDED)
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
