@@ -1,1 +1,1 @@
-build-rotate
+build-translator
