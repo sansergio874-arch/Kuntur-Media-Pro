@@ -25,12 +25,13 @@ jobs:
         with:
           gradle-version: '8.4'
 
-      - name: Generate Gradle Wrapper if missing
+      - name: Ensure Gradle Wrapper
         run: |
           if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.4
-            chmod +x gradlew
+            gradle wrapper --gradle-version 8.4 || true
+            chmod +x gradlew 2>/dev/null || true
           fi
+          ls -la gradlew gradle/wrapper/ || true
 
       - name: Build Debug APK
         env:
@@ -38,7 +39,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           set -o pipefail
-          if [ -f gradlew ]; then
+          if [ -x ./gradlew ]; then
             ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
           else
             gradle assembleDebug --stacktrace 2>&1 | tee build.log
@@ -47,43 +48,33 @@ jobs:
       - name: Show build errors on failure
         if: failure()
         run: |
-          echo "=== ERRORES DE COMPILACIÓN ==="
+          echo "=== ERRORES ==="
           if [ -f build.log ]; then
             grep -E "error:|e: |FAILED|Exception|What went wrong" build.log | head -80 || true
-            tail -100 build.log
+            tail -80 build.log
           fi
 
       - name: Validate and package APK
         run: |
           set -euo pipefail
           APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
-          if [ -z "$APK" ]; then
+          if [ -z "${APK:-}" ]; then
             echo "ERROR: No se generó ningún APK."
-            ls -laR app/build/outputs || true
+            find app/build -name "*.apk" 2>/dev/null || true
             exit 1
           fi
           SIZE=$(stat -c%s "$APK")
           echo "APK: $APK ($SIZE bytes)"
-          if [ "$SIZE" -lt 500000 ]; then
-            echo "ERROR: APK demasiado pequeño"
-            exit 1
-          fi
-          # Magic ZIP
-          HEADER=$(od -An -tx1 -N4 "$APK" | tr -d ' \n')
-          echo "Header: $HEADER"
-          echo "$HEADER" | grep -q "504b0304" || { echo "ERROR: no es ZIP/APK"; exit 1; }
+          test "$SIZE" -ge 500000
           unzip -t "$APK" >/dev/null
-          LIST=$(unzip -l "$APK")
-          echo "$LIST" | grep -q "AndroidManifest.xml"
-          echo "$LIST" | grep -q "classes.dex"
-          echo "$LIST" | grep -q "resources.arsc"
-
+          unzip -l "$APK" | grep -q "AndroidManifest.xml"
+          unzip -l "$APK" | grep -q "classes.dex"
+          unzip -l "$APK" | grep -q "resources.arsc"
           mkdir -p dist
           cp "$APK" dist/Kuntur-Media-Pro.apk
-          # ZIP para transferencia segura (WhatsApp no corrompe el .zip igual)
-          (cd dist && zip -9 Kuntur-Media-Pro.zip Kuntur-Media-Pro.apk)
+          (cd dist && zip -9 -j Kuntur-Media-Pro.zip Kuntur-Media-Pro.apk)
           ls -lh dist/
-          echo "=== APK válido y empaquetado ==="
+          echo "APK válido"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -101,13 +92,13 @@ jobs:
           tag_name: v2.9.${{ github.run_number }}
           name: Kuntur Media Pro v2.9.${{ github.run_number }}
           body: |
-            ## Instalación
-            1. Descargue **Kuntur-Media-Pro.zip** (recomendado) o el APK directo.
-            2. Si descargó el ZIP: ábralo y extraiga `Kuntur-Media-Pro.apk`.
-            3. En el teléfono: permita instalar apps de fuentes desconocidas.
-            4. Desinstale la versión anterior e instale este APK.
+            ## Instalación correcta (evita INSTALL_PARSE_FAILED_NOT_APK)
+            1. Descargue **Kuntur-Media-Pro.zip** desde este release.
+            2. Extraiga el archivo `Kuntur-Media-Pro.apk`.
+            3. Desinstale la versión anterior de la app.
+            4. Instale el APK (permita fuentes desconocidas).
 
-            **No envíe el APK por WhatsApp** (se corrompe). Use el ZIP o descargue desde GitHub.
+            No envíe el APK por WhatsApp: se corrompe. Use el ZIP o descargue directo en el teléfono desde GitHub.
           files: |
             dist/Kuntur-Media-Pro.apk
             dist/Kuntur-Media-Pro.zip
