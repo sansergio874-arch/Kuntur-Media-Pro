@@ -27,9 +27,9 @@ object PurchaseManager {
         val approved = isApproved(context)
         val plan = getCurrentPlan(context)
         return when {
-            plan == "free" -> "Sin plan"
+            plan == "free" || plan.isBlank() -> "Sin plan activo"
             approved -> "Activo: ${planDisplayName(plan)}"
-            else -> "Pendiente de pago / activación"
+            else -> "Pendiente de pago / activación · código: ${getTransactionCode(context)}"
         }
     }
 
@@ -52,6 +52,33 @@ object PurchaseManager {
             .apply()
     }
 
+    /**
+     * Activa el plan con el PIN de administrador (solo usted).
+     * Ústil tras recibir el Yape del cliente, en el dispositivo del cliente.
+     */
+    fun activateWithAdminPin(
+        context: Context,
+        pin: String,
+        planId: String? = null,
+        transactionCode: String? = null
+    ): Boolean {
+        if (pin.trim() != BillingConfig.ADMIN_PIN) return false
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val finalPlan = planId?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("plan", null)
+            ?: return false
+        if (finalPlan == "free") return false
+        val code = transactionCode?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("tx_code", "")
+            ?: "ADMIN"
+        prefs.edit()
+            .putString("plan", finalPlan)
+            .putBoolean("approved", true)
+            .putString("tx_code", code)
+            .apply()
+        return true
+    }
+
     fun markPending(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("approved", false)
@@ -63,30 +90,24 @@ object PurchaseManager {
     }
 
     /**
-     * Reglas de acceso por plan:
-     * - free: solo contenido no premium (radios/TV gratuitos actuales)
-     * - basico aprobado: radios
-     * - estandar aprobado: radios + TV
-     * - premium aprobado: todo
+     * Reglas de acceso:
+     * - Contenido no premium: siempre accesible
+     * - Premium + plan aprobado:
+     *   - basico: radios
+     *   - estandar: radios + TV
+     *   - premium: todo
      */
     fun canAccess(context: Context, item: MediaItem): Boolean {
+        if (!item.isPremium) return true
+
         val plan = getCurrentPlan(context)
         val approved = isApproved(context)
-        val cat = item.category.lowercase()
-
-        if (!item.isPremium) {
-            // Contenido gratuito siempre accesible
-            if (cat == "radio" || cat == "tv") return true
-            // Películas no premium solo con plan o si no requieren pago
-            if (!approved) return cat != "película" || !item.isPremium
-            return true
-        }
-
-        // Contenido marcado premium
         if (!approved) return false
+
+        val cat = item.category.lowercase()
         return when (plan) {
             "premium" -> true
-            "estandar" -> cat == "radio" || cat == "tv"
+            "estandar" -> cat == "radio" || cat == "tv" || cat.contains("canal")
             "basico" -> cat == "radio"
             else -> false
         }
