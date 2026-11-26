@@ -35,6 +35,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         try {
+            Thread.setDefaultUncaughtExceptionHandler { _, e ->
+                try {
+                    android.util.Log.e("KunturCrash", e.message ?: "crash", e)
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+
+        try {
             requestNotificationPermissionIfNeeded()
         } catch (_: Throwable) {}
 
