@@ -3,16 +3,22 @@ package com.kuntur.mediapro.billing
 import com.kuntur.mediapro.BuildConfig
 
 /**
- * Configuración del backend de pagos (Supabase).
+ * Configuración de pagos (Yape + opcional Supabase).
  *
- * 1. Cree un proyecto en https://supabase.com
- * 2. Ejecute el SQL de supabase/subscriptions.sql
- * 3. Configure SUPABASE_URL y SUPABASE_ANON_KEY en GitHub Secrets
- *    o rellene los valores por defecto abajo para pruebas locales.
+ * PIN de administrador: solo usted lo usa para activar planes en el dispositivo
+ * del cliente tras recibir el Yape (o en su propio dispositivo de pruebas).
  */
 object BillingConfig {
     /** Número Yape mostrado al usuario */
     const val YAPE_NUMBER = "955238172"
+
+    /**
+     * PIN secreto del administrador (usted).
+     * El cliente paga por Yape e indica el código KNT-XXXX.
+     * Usted introduce este PIN en la app del cliente (o en la suya) para activar.
+     * Cámbielo si lo desea antes de distribuir el APK.
+     */
+    const val ADMIN_PIN = "874955"
 
     val supabaseUrl: String
         get() = BuildConfig.SUPABASE_URL.trim().trimEnd('/')
