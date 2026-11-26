@@ -46,6 +46,16 @@ object TransactionManager {
         persistAll(context, list)
     }
 
+    fun remove(context: Context, id: String) {
+        val list = getHistory(context).filter { it.id != id }
+        persistAll(context, list)
+    }
+
+    fun clearHistory(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove("history").apply()
+    }
+
     fun getHistory(context: Context): List<Transaction> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val raw = prefs.getString("history", "") ?: ""
