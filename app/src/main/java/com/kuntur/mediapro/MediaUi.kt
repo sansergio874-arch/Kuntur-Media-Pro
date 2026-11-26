@@ -190,6 +190,9 @@ fun PlayerScreen(
         else -> "Reproductor de películas"
     }
 
+    // ZOOM llena la pantalla sin franjas negras (puede recortar bordes mínimos)
+    val videoResizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+
     Column(Modifier.fillMaxSize().background(Color.Black)) {
         if (!isFullscreen) {
             Row(Modifier.fillMaxWidth().background(NavyUi).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -220,7 +223,7 @@ fun PlayerScreen(
                     PlayerView(ctx).apply {
                         this.player = player
                         useController = true
-                        resizeMode = if (isFullscreen) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        resizeMode = videoResizeMode
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         controllerShowTimeoutMs = 3500
                         setShowNextButton(false)
@@ -230,7 +233,7 @@ fun PlayerScreen(
                 },
                 update = { view ->
                     view.player = player
-                    view.resizeMode = if (isFullscreen) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    view.resizeMode = videoResizeMode
                 },
                 modifier = Modifier
                     .fillMaxSize()
@@ -284,7 +287,7 @@ fun PlayerScreen(
                 Text("Puede minimizar la aplicación: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Use el botón para pantalla completa. La pantalla girará a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Pantalla completa: sin franjas negras. Gira a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
