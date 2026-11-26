@@ -26,9 +26,10 @@ import com.kuntur.mediapro.ui.theme.KunturMediaProTheme
 class MainActivity : ComponentActivity() {
 
     private var playerState by mutableStateOf<ExoPlayer?>(null)
+    private var bootError by mutableStateOf<String?>(null)
 
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* resultado opcional */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,32 +38,35 @@ class MainActivity : ComponentActivity() {
             requestNotificationPermissionIfNeeded()
         } catch (_: Throwable) {}
 
-        // Crear player de forma segura
-        val existing = try { PlayerHolder.player } catch (_: Throwable) { null }
-        playerState = existing ?: try {
-            StreamPlayerFactory.create(applicationContext).also {
-                try { PlayerHolder.attach(it) } catch (_: Throwable) {}
-            }
-        } catch (_: Throwable) {
-            try {
-                ExoPlayer.Builder(applicationContext).build().also {
+        try {
+            val existing = try { PlayerHolder.player } catch (_: Throwable) { null }
+            playerState = existing ?: try {
+                StreamPlayerFactory.create(applicationContext).also {
                     try { PlayerHolder.attach(it) } catch (_: Throwable) {}
                 }
             } catch (_: Throwable) {
-                null
+                try {
+                    ExoPlayer.Builder(applicationContext).build().also {
+                        try { PlayerHolder.attach(it) } catch (_: Throwable) {}
+                    }
+                } catch (e: Throwable) {
+                    bootError = e.message?.take(80)
+                    null
+                }
             }
+        } catch (e: Throwable) {
+            bootError = e.message?.take(80)
+            playerState = null
         }
 
         setContent {
             KunturMediaProTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0A1628)) {
-                    val p = playerState ?: try { PlayerHolder.player } catch (_: Throwable) { null }
-                    if (p != null) {
-                        AppRoot(p)
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Error al iniciar el reproductor", color = Color.White)
-                        }
+                    val p = playerState
+                    when {
+                        p != null -> AppRoot(p)
+                        bootError != null -> ErrorScreen("Error al iniciar: $bootError")
+                        else -> ErrorScreen("Error al iniciar el reproductor")
                     }
                 }
             }
@@ -90,5 +94,12 @@ class MainActivity : ComponentActivity() {
                 notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun ErrorScreen(message: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text(message, color = Color.White)
     }
 }
