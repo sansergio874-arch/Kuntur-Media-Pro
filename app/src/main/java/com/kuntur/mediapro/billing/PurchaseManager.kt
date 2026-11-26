@@ -13,6 +13,7 @@ object PurchaseManager {
     )
 
     private const val PREFS = "kuntur_prefs"
+    private const val KEY_OWNER = "owner_device"
 
     fun getCurrentPlan(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("plan", "free") ?: "free"
@@ -22,6 +23,28 @@ object PurchaseManager {
 
     fun getTransactionCode(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("tx_code", "") ?: ""
+
+    /** Solo true en el dispositivo donde usted desbloqueó el modo propietario. */
+    fun isOwnerDevice(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_OWNER, false)
+
+    /**
+     * Activa el modo propietario en este dispositivo si el PIN es correcto.
+     * El panel de administración solo se muestra cuando esto es true.
+     */
+    fun unlockOwnerMode(context: Context, pin: String): Boolean {
+        if (pin.trim() != BillingConfig.ADMIN_PIN) return false
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_OWNER, true)
+            .apply()
+        return true
+    }
+
+    fun lockOwnerMode(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_OWNER, false)
+            .apply()
+    }
 
     fun getStatusLabel(context: Context): String {
         val approved = isApproved(context)
@@ -52,10 +75,6 @@ object PurchaseManager {
             .apply()
     }
 
-    /**
-     * Activa el plan con el PIN de administrador (solo usted).
-     * Ústil tras recibir el Yape del cliente, en el dispositivo del cliente.
-     */
     fun activateWithAdminPin(
         context: Context,
         pin: String,
@@ -89,14 +108,6 @@ object PurchaseManager {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
-    /**
-     * Reglas de acceso:
-     * - Contenido no premium: siempre accesible
-     * - Premium + plan aprobado:
-     *   - basico: radios
-     *   - estandar: radios + TV
-     *   - premium: todo
-     */
     fun canAccess(context: Context, item: MediaItem): Boolean {
         if (!item.isPremium) return true
 
