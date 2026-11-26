@@ -43,58 +43,55 @@ jobs:
           else
             gradle assembleDebug --stacktrace 2>&1 | tee build.log
           fi
-          echo "Build exit code: $?"
 
       - name: Show build errors on failure
         if: failure()
         run: |
           echo "=== ERRORES DE COMPILACIÓN ==="
           if [ -f build.log ]; then
-            grep -E "error:|e: |FAILED|Exception|What went wrong" build.log | head -80 || echo "No se encontraron líneas de error específicas"
-            echo "=== Últimas 100 líneas del log ==="
+            grep -E "error:|e: |FAILED|Exception|What went wrong" build.log | head -80 || true
             tail -100 build.log
-          else
-            echo "No hay build.log"
           fi
 
-      - name: Validate APK
+      - name: Validate and package APK
         run: |
           set -euo pipefail
-          if [ ! -d app/build/outputs/apk/debug ]; then
-            echo "ERROR: Directorio de APK no existe. El build falló."
-            exit 1
-          fi
           APK=$(ls app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1)
           if [ -z "$APK" ]; then
             echo "ERROR: No se generó ningún APK."
-            ls -la app/build/outputs/apk/debug/ || true
+            ls -laR app/build/outputs || true
             exit 1
           fi
-          echo "=== Validando APK: $APK ==="
-          ls -lh "$APK"
-
           SIZE=$(stat -c%s "$APK")
-          echo "Tamaño: $SIZE bytes"
+          echo "APK: $APK ($SIZE bytes)"
           if [ "$SIZE" -lt 500000 ]; then
-            echo "ERROR: APK demasiado pequeño (< 500 KB)."
+            echo "ERROR: APK demasiado pequeño"
             exit 1
           fi
-
-          unzip -t "$APK" > /dev/null || { echo "ERROR: No es un ZIP válido"; exit 1; }
-
+          # Magic ZIP
+          HEADER=$(od -An -tx1 -N4 "$APK" | tr -d ' \n')
+          echo "Header: $HEADER"
+          echo "$HEADER" | grep -q "504b0304" || { echo "ERROR: no es ZIP/APK"; exit 1; }
+          unzip -t "$APK" >/dev/null
           LIST=$(unzip -l "$APK")
-          echo "$LIST" | grep -q "AndroidManifest.xml" || { echo "ERROR: Falta AndroidManifest.xml"; exit 1; }
-          echo "$LIST" | grep -q "classes.dex" || { echo "ERROR: Falta classes.dex"; exit 1; }
-          echo "$LIST" | grep -q "resources.arsc" || { echo "ERROR: Falta resources.arsc"; exit 1; }
+          echo "$LIST" | grep -q "AndroidManifest.xml"
+          echo "$LIST" | grep -q "classes.dex"
+          echo "$LIST" | grep -q "resources.arsc"
 
-          echo "=== APK válido ==="
-          echo "$LIST" | head -30
+          mkdir -p dist
+          cp "$APK" dist/Kuntur-Media-Pro.apk
+          # ZIP para transferencia segura (WhatsApp no corrompe el .zip igual)
+          (cd dist && zip -9 Kuntur-Media-Pro.zip Kuntur-Media-Pro.apk)
+          ls -lh dist/
+          echo "=== APK válido y empaquetado ==="
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Kuntur-Media-Pro-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            dist/Kuntur-Media-Pro.apk
+            dist/Kuntur-Media-Pro.zip
           if-no-files-found: error
 
       - name: Create GitHub Release
@@ -104,11 +101,15 @@ jobs:
           tag_name: v2.9.${{ github.run_number }}
           name: Kuntur Media Pro v2.9.${{ github.run_number }}
           body: |
-            APK Kuntur Media Pro (debug).
-            - Reproductor simplificado
-            - Pantalla completa con rotación
-            - Calidades de video
-            - Traductor de voz
-          files: app/build/outputs/apk/debug/*.apk
+            ## Instalación
+            1. Descargue **Kuntur-Media-Pro.zip** (recomendado) o el APK directo.
+            2. Si descargó el ZIP: ábralo y extraiga `Kuntur-Media-Pro.apk`.
+            3. En el teléfono: permita instalar apps de fuentes desconocidas.
+            4. Desinstale la versión anterior e instale este APK.
+
+            **No envíe el APK por WhatsApp** (se corrompe). Use el ZIP o descargue desde GitHub.
+          files: |
+            dist/Kuntur-Media-Pro.apk
+            dist/Kuntur-Media-Pro.zip
           draft: false
           prerelease: false
