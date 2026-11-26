@@ -3,21 +3,23 @@ package com.kuntur.mediapro.billing
 import com.kuntur.mediapro.BuildConfig
 
 /**
- * Pagos Yape + modo propietario (solo su dispositivo).
+ * Pagos Yape. Panel de administración solo en dispositivos del propietario.
  */
 object BillingConfig {
     const val YAPE_NUMBER = "955238172"
 
-    /** PIN solo para usted. No se muestra en la interfaz de clientes. */
+    /** Uso interno al activar planes (no se pide en pantalla). */
     const val ADMIN_PIN = "874955"
 
     /**
-     * IDs de dispositivo del propietario (dev_XXXXXXXX).
-     * Puede añadir el suyo aquí para que el panel aparezca sin desbloqueo.
-     * Mientras esté vacío, se desbloquea una vez en Configuraciones con el PIN.
+     * IDs de sus dispositivos (formato dev_XXXXXXXX).
+     * Solo en estos equipos se muestra el panel de administración,
+     * sin PIN ni gestos. Cualquier otra instalación no lo ve.
+     *
+     * Cómo obtener su ID: Configuraciones → "ID de este dispositivo".
      */
     val OWNER_DEVICE_IDS: Set<String> = setOf(
-        // Ejemplo: "dev_abc123..."
+        // Se completará con su ID real
     )
 
     val supabaseUrl: String
