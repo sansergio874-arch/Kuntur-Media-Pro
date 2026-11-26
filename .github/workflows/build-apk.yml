@@ -24,25 +24,35 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.4'
+          cache-disabled: true
 
-      - name: Ensure Gradle Wrapper
+      - name: Write local.properties placeholders
         run: |
-          if [ ! -f gradlew ]; then
-            gradle wrapper --gradle-version 8.4 || true
-            chmod +x gradlew 2>/dev/null || true
-          fi
-          ls -la gradlew gradle/wrapper/ || true
+          echo "sdk.dir=$ANDROID_HOME" > local.properties || true
 
-      - name: Build Debug APK
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
+
+      - name: Build Debug APK (with retry)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx2g"
         run: |
           set -o pipefail
-          if [ -x ./gradlew ]; then
-            ./gradlew assembleDebug --stacktrace 2>&1 | tee build.log
-          else
-            gradle assembleDebug --stacktrace 2>&1 | tee build.log
+          build_once() {
+            if [ -x ./gradlew ]; then
+              ./gradlew assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+            else
+              gradle assembleDebug --no-daemon --stacktrace --info 2>&1 | tee build.log
+            fi
+          }
+          if ! build_once; then
+            echo "=== Primer intento falló; reintentando en 15s ==="
+            sleep 15
+            build_once
           fi
 
       - name: Show build errors on failure
@@ -50,8 +60,9 @@ jobs:
         run: |
           echo "=== ERRORES ==="
           if [ -f build.log ]; then
-            grep -E "error:|e: |FAILED|Exception|What went wrong" build.log | head -80 || true
-            tail -80 build.log
+            grep -E "error:|e: |FAILED|Exception|What went wrong|Could not resolve|Unresolved" build.log | head -100 || true
+            echo "=== TAIL ==="
+            tail -100 build.log
           fi
 
       - name: Validate and package APK
@@ -92,13 +103,13 @@ jobs:
           tag_name: v2.9.${{ github.run_number }}
           name: Kuntur Media Pro v2.9.${{ github.run_number }}
           body: |
-            ## Instalación correcta (evita INSTALL_PARSE_FAILED_NOT_APK)
-            1. Descargue **Kuntur-Media-Pro.zip** desde este release.
-            2. Extraiga el archivo `Kuntur-Media-Pro.apk`.
-            3. Desinstale la versión anterior de la app.
-            4. Instale el APK (permita fuentes desconocidas).
+            ## Instalación
+            1. Descargue **Kuntur-Media-Pro.zip**
+            2. Extraiga `Kuntur-Media-Pro.apk`
+            3. Desinstale la versión anterior
+            4. Instale el APK
 
-            No envíe el APK por WhatsApp: se corrompe. Use el ZIP o descargue directo en el teléfono desde GitHub.
+            No envíe el APK por WhatsApp (se corrompe).
           files: |
             dist/Kuntur-Media-Pro.apk
             dist/Kuntur-Media-Pro.zip
