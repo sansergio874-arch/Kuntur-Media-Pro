@@ -24,11 +24,16 @@ object PurchaseManager {
     fun getTransactionCode(context: Context): String =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("tx_code", "") ?: ""
 
-    fun isOwnerDevice(context: Context): Boolean =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_OWNER, false)
+    fun isOwnerDevice(context: Context): Boolean {
+        val id = DeviceId.get(context)
+        if (BillingConfig.OWNER_DEVICE_IDS.any { it.isNotBlank() && (id == it || id.endsWith(it)) }) {
+            return true
+        }
+        return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_OWNER, false)
+    }
 
-    /** Activa modo propietario en este dispositivo (sin PIN). */
-    fun unlockOwnerMode(context: Context): Boolean {
+    fun unlockOwnerMode(context: Context, pin: String): Boolean {
+        if (pin.trim() != BillingConfig.ADMIN_PIN) return false
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean(KEY_OWNER, true)
             .apply()
@@ -70,18 +75,32 @@ object PurchaseManager {
             .apply()
     }
 
-    fun approvePlan(context: Context, planId: String, transactionCode: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("plan", planId)
+    fun activateWithAdminPin(
+        context: Context,
+        pin: String,
+        planId: String? = null,
+        transactionCode: String? = null
+    ): Boolean {
+        if (pin.trim() != BillingConfig.ADMIN_PIN) return false
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val finalPlan = planId?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("plan", null)
+            ?: return false
+        if (finalPlan == "free") return false
+        val code = transactionCode?.takeIf { it.isNotBlank() }
+            ?: prefs.getString("tx_code", "")
+            ?: "ADMIN"
+        prefs.edit()
+            .putString("plan", finalPlan)
             .putBoolean("approved", true)
-            .putString("tx_code", transactionCode)
+            .putString("tx_code", code)
             .apply()
+        return true
     }
 
-    fun rejectPlan(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putBoolean("approved", false)
-            .apply()
+    fun activatePendingAsOwner(context: Context): Boolean {
+        if (!isOwnerDevice(context)) return false
+        return activateWithAdminPin(context, BillingConfig.ADMIN_PIN)
     }
 
     fun markPending(context: Context) {
