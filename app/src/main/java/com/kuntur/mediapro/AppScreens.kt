@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.*
@@ -59,7 +58,7 @@ private val GoldS = Color(0xFFE8B923)
 enum class AppSection { HOME, BROWSE, PLAYER, PLANS, FAVORITES, SETTINGS, TRANSLATOR }
 
 fun canAccess(context: Context, item: MediaItem): Boolean =
-    PurchaseManager.canAccess(context, item)
+    try { PurchaseManager.canAccess(context, item) } catch (_: Throwable) { true }
 
 @Composable
 fun AppRoot(player: ExoPlayer) {
@@ -98,7 +97,6 @@ fun AppRoot(player: ExoPlayer) {
                 NavigationDrawerItem(icon = { Icon(Icons.Default.Home, null, tint = GoldS) }, label = { Text("Inicio", color = Color.White) }, selected = section == AppSection.HOME, onClick = { section = AppSection.HOME; scope.launch { drawerState.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(icon = { Icon(Icons.Default.Mic, null, tint = GoldS) }, label = { Text("Traductor", color = Color.White) }, selected = section == AppSection.TRANSLATOR, onClick = { section = AppSection.TRANSLATOR; scope.launch { drawerState.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                 NavigationDrawerItem(icon = { Icon(Icons.Default.Settings, null, tint = GoldS) }, label = { Text("Configuraciones", color = Color.White) }, selected = section == AppSection.SETTINGS, onClick = { section = AppSection.SETTINGS; scope.launch { drawerState.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
-                NavigationDrawerItem(icon = { Icon(Icons.Default.Star, null, tint = GoldS) }, label = { Text("Planes Premium", color = Color.White) }, selected = section == AppSection.PLANS, onClick = { section = AppSection.PLANS; scope.launch { drawerState.close() } }, modifier = Modifier.padding(horizontal = 12.dp))
                 Spacer(Modifier.weight(1f))
                 Text("Fuentes autorizadas únicamente", color = Color.White.copy(0.4f), fontSize = 11.sp, modifier = Modifier.padding(20.dp))
             }
@@ -137,7 +135,7 @@ fun AppRoot(player: ExoPlayer) {
         }
         if (accessDeniedMessage != null) {
             AlertDialog(onDismissRequest = { accessDeniedMessage = null }, title = { Text("Contenido Premium") }, text = { Text(accessDeniedMessage!!) },
-                confirmButton = { Button(onClick = { accessDeniedMessage = null; section = AppSection.PLANS }, colors = ButtonDefaults.buttonColors(containerColor = GoldS)) { Text("Ver planes", color = NavyS) } },
+                confirmButton = { Button(onClick = { accessDeniedMessage = null; section = AppSection.SETTINGS }, colors = ButtonDefaults.buttonColors(containerColor = GoldS)) { Text("Ir a Configuraciones", color = NavyS) } },
                 dismissButton = { TextButton(onClick = { accessDeniedMessage = null }) { Text("Cerrar", color = GoldS) } })
         }
         if (playErrorMessage != null) {
@@ -147,7 +145,7 @@ fun AppRoot(player: ExoPlayer) {
 
         fun startPlayback(item: MediaItem) {
             if (!canAccess(context, item)) {
-                accessDeniedMessage = "Contenido Premium. Elija un plan, pague por Yape ${BillingConfig.YAPE_NUMBER}."
+                accessDeniedMessage = "Contenido Premium. Active un plan desde Configuraciones tras el pago por Yape."
                 return
             }
             currentItem = item
@@ -166,19 +164,25 @@ fun AppRoot(player: ExoPlayer) {
             AppSection.PLAYER -> if (currentItem != null) {
                 PlayerScreen(item = currentItem!!, player = player, onBack = { section = AppSection.BROWSE }, onStop = { try { player.stop(); player.clearMediaItems() } catch (_: Exception) {}; section = AppSection.BROWSE }, onToggleFavorite = { FavoritesManager.toggle(context, currentItem!!.id) })
             } else { section = AppSection.HOME }
-            AppSection.PLANS -> PlansScreen(onBack = { section = AppSection.HOME })
+            AppSection.PLANS -> PlansScreen(onBack = { section = AppSection.SETTINGS })
             AppSection.FAVORITES -> FavoritesScreen(onPlay = { startPlayback(it) }, onBack = { section = AppSection.HOME })
-            AppSection.SETTINGS -> SettingsScreen(onBack = { section = AppSection.HOME }, onClearAll = { PlaylistCatalog.clearImported(context) }, onRemoveOne = { url -> PlaylistCatalog.removeSource(context, url) })
+            AppSection.SETTINGS -> SettingsScreen(
+                onBack = { section = AppSection.HOME },
+                onClearAll = { PlaylistCatalog.clearImported(context) },
+                onRemoveOne = { url -> PlaylistCatalog.removeSource(context, url) },
+                onPlans = { section = AppSection.PLANS }
+            )
             AppSection.TRANSLATOR -> TranslatorScreen(onBack = { section = AppSection.HOME })
-            AppSection.BROWSE -> BrowsePagerScreen(initialPage = browseInitialPage, onPlay = { startPlayback(it) }, onBack = { section = AppSection.HOME }, onPlans = { section = AppSection.PLANS })
+            AppSection.BROWSE -> BrowsePagerScreen(initialPage = browseInitialPage, onPlay = { startPlayback(it) }, onBack = { section = AppSection.HOME })
             AppSection.HOME -> HomeHub(
-                radioCount = PlaylistCatalog.radios.size, channelCount = PlaylistCatalog.channels.size, movieCount = PlaylistCatalog.movies.size,
+                radioCount = try { PlaylistCatalog.radios.size } catch (_: Throwable) { 0 },
+                channelCount = try { PlaylistCatalog.channels.size } catch (_: Throwable) { 0 },
+                movieCount = try { PlaylistCatalog.movies.size } catch (_: Throwable) { 0 },
                 onMenu = { scope.launch { drawerState.open() } },
                 onRadios = { browseInitialPage = 0; section = AppSection.BROWSE },
                 onChannels = { browseInitialPage = 1; section = AppSection.BROWSE },
                 onMovies = { browseInitialPage = 2; section = AppSection.BROWSE },
                 onFavorites = { section = AppSection.FAVORITES },
-                onPlans = { section = AppSection.PLANS },
                 onAddPlaylist = { playlistUrl = ""; playlistMessage = null; showPlaylistDialog = true }
             )
         }
@@ -201,7 +205,17 @@ fun SplashScreen() {
 }
 
 @Composable
-fun HomeHub(radioCount: Int, channelCount: Int, movieCount: Int, onMenu: () -> Unit, onRadios: () -> Unit, onChannels: () -> Unit, onMovies: () -> Unit, onFavorites: () -> Unit, onPlans: () -> Unit, onAddPlaylist: () -> Unit) {
+fun HomeHub(
+    radioCount: Int,
+    channelCount: Int,
+    movieCount: Int,
+    onMenu: () -> Unit,
+    onRadios: () -> Unit,
+    onChannels: () -> Unit,
+    onMovies: () -> Unit,
+    onFavorites: () -> Unit,
+    onAddPlaylist: () -> Unit
+) {
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS))).padding(20.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onMenu) { Icon(Icons.Default.Menu, contentDescription = "Menú", tint = GoldS) }
@@ -219,37 +233,57 @@ fun HomeHub(radioCount: Int, channelCount: Int, movieCount: Int, onMenu: () -> U
         Spacer(Modifier.height(12.dp))
         SectionCard("Favoritos", "Sus contenidos guardados", Icons.Default.Favorite, onFavorites)
         Spacer(Modifier.height(20.dp))
-        Button(onClick = onAddPlaylist, modifier = Modifier.fillMaxWidth().height(52.dp), colors = ButtonDefaults.buttonColors(containerColor = GoldS), shape = RoundedCornerShape(14.dp)) {
+        Button(
+            onClick = onAddPlaylist,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = GoldS),
+            shape = RoundedCornerShape(14.dp)
+        ) {
             Text("+ Agregar lista IPTV (M3U)", color = NavyS, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
         Text("Las listas se guardan permanentemente.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-        Spacer(Modifier.weight(1f))
-        Button(onClick = onPlans, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.buttonColors(containerColor = CardBgS), shape = RoundedCornerShape(14.dp)) {
-            Text("Planes Premium y Yape", color = GoldS, fontWeight = FontWeight.SemiBold)
-        }
     }
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onClearAll: () -> Unit, onRemoveOne: (String) -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onClearAll: () -> Unit,
+    onRemoveOne: (String) -> Unit,
+    onPlans: () -> Unit = {}
+) {
     val context = LocalContext.current
     var showClearConfirm by remember { mutableStateOf(false) }
-    var sources by remember { mutableStateOf(PlaylistCatalog.savedSources(context)) }
-    var isOwner by remember { mutableStateOf(PurchaseManager.isOwnerDevice(context)) }
+    var sources by remember { mutableStateOf(try { PlaylistCatalog.savedSources(context) } catch (_: Throwable) { emptyList() }) }
+    var isOwner by remember { mutableStateOf(try { PurchaseManager.isOwnerDevice(context) } catch (_: Throwable) { false }) }
     var unlockPin by remember { mutableStateOf("") }
     var unlockMsg by remember { mutableStateOf<String?>(null) }
-    val deviceId = remember { DeviceId.get(context) }
+    val deviceId = remember { try { DeviceId.get(context) } catch (_: Throwable) { "—" } }
 
     if (showClearConfirm) {
-        AlertDialog(onDismissRequest = { showClearConfirm = false }, title = { Text("Eliminar todas las listas") }, text = { Text("¿Continuar?") },
-            confirmButton = { Button(onClick = { onClearAll(); sources = emptyList(); showClearConfirm = false }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))) { Text("Eliminar todo", color = Color.White) } },
-            dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancelar", color = GoldS) } })
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("Eliminar todas las listas") },
+            text = { Text("¿Continuar?") },
+            confirmButton = {
+                Button(
+                    onClick = { onClearAll(); sources = emptyList(); showClearConfirm = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                ) { Text("Eliminar todo", color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { showClearConfirm = false }) { Text("Cancelar", color = GoldS) } }
+        )
     }
 
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(NavyS, NavyMidS))).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Icon(Icons.Default.Home, null, tint = GoldS, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Inicio", color = GoldS) }
-            Spacer(Modifier.weight(1f)); Icon(Icons.Default.Settings, null, tint = GoldS)
+            TextButton(onClick = onBack) {
+                Icon(Icons.Default.Home, null, tint = GoldS, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Inicio", color = GoldS)
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(Icons.Default.Settings, null, tint = GoldS)
         }
         Spacer(Modifier.height(8.dp))
         Text("Configuraciones", color = GoldS, fontSize = 26.sp, fontWeight = FontWeight.Bold)
@@ -263,49 +297,100 @@ fun SettingsScreen(onBack: () -> Unit, onClearAll: () -> Unit, onRemoveOne: (Str
             }
         }
         Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = onPlans,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = CardBgS),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Text("Planes Premium y Yape", color = GoldS, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.height(16.dp))
         Text("Listas importadas", color = Color.White, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-        if (sources.isEmpty()) Text("No hay listas M3U guardadas.", color = Color.White.copy(0.45f), fontSize = 13.sp)
-        else Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBgS), shape = RoundedCornerShape(14.dp)) {
-            Column(Modifier.padding(8.dp)) {
-                sources.forEach { url ->
-                    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(url, color = Color.White.copy(0.75f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                        IconButton(onClick = { onRemoveOne(url); sources = PlaylistCatalog.savedSources(context) }) { Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935)) }
+        if (sources.isEmpty()) {
+            Text("No hay listas M3U guardadas.", color = Color.White.copy(0.45f), fontSize = 13.sp)
+        } else {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = CardBgS), shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(8.dp)) {
+                    sources.forEach { url ->
+                        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(url, color = Color.White.copy(0.75f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            IconButton(onClick = {
+                                onRemoveOne(url)
+                                sources = try { PlaylistCatalog.savedSources(context) } catch (_: Throwable) { emptyList() }
+                            }) {
+                                Icon(Icons.Default.Delete, null, tint = Color(0xFFE53935))
+                            }
+                        }
                     }
                 }
             }
         }
         if (sources.isNotEmpty()) {
             Spacer(Modifier.height(12.dp))
-            Button(onClick = { showClearConfirm = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))) { Text("Eliminar todas las listas", color = Color.White) }
+            Button(
+                onClick = { showClearConfirm = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+            ) { Text("Eliminar todas las listas", color = Color.White) }
         }
         Spacer(Modifier.height(16.dp))
         Text("Yape: ${BillingConfig.YAPE_NUMBER}", color = GoldS, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(16.dp))
         if (!isOwner) {
             Text("Acceso técnico", color = Color.White.copy(0.4f), fontSize = 12.sp)
-            OutlinedTextField(value = unlockPin, onValueChange = { unlockPin = it }, label = { Text("Código") }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+            OutlinedTextField(
+                value = unlockPin,
+                onValueChange = { unlockPin = it },
+                label = { Text("Código") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            )
             Spacer(Modifier.height(8.dp))
-            Button(onClick = {
-                if (PurchaseManager.unlockOwnerMode(context, unlockPin)) { isOwner = true; unlockPin = ""; unlockMsg = "Modo propietario activado." }
-                else { unlockMsg = "Código incorrecto."; unlockPin = "" }
-            }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = CardBgS)) { Text("Confirmar", color = GoldS) }
-            unlockMsg?.let { Text(it, color = Color(0xFF81C784), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
+            Button(
+                onClick = {
+                    try {
+                        if (PurchaseManager.unlockOwnerMode(context, unlockPin)) {
+                            isOwner = true
+                            unlockPin = ""
+                            unlockMsg = "Modo propietario activado."
+                        } else {
+                            unlockMsg = "Código incorrecto."
+                            unlockPin = ""
+                        }
+                    } catch (_: Throwable) {
+                        unlockMsg = "No se pudo activar."
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = CardBgS)
+            ) { Text("Confirmar", color = GoldS) }
+            unlockMsg?.let {
+                Text(it, color = Color(0xFF81C784), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+            }
         } else {
             Text("Modo propietario activo", color = Color(0xFF81C784), fontSize = 13.sp)
-            TextButton(onClick = { PurchaseManager.lockOwnerMode(context); isOwner = false }) { Text("Desactivar", color = Color.White.copy(0.5f)) }
+            TextButton(onClick = {
+                try { PurchaseManager.lockOwnerMode(context) } catch (_: Throwable) {}
+                isOwner = false
+            }) { Text("Desactivar", color = Color.White.copy(0.5f)) }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
         Text("Utilice únicamente fuentes autorizadas.", color = Color.White.copy(0.4f), fontSize = 12.sp)
     }
 }
 
 @Composable
 fun SectionCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = CardBgS), shape = RoundedCornerShape(16.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = CardBgS),
+        shape = RoundedCornerShape(16.dp)
+    ) {
         Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = GoldS, modifier = Modifier.size(28.dp)); Spacer(Modifier.width(16.dp))
+            Icon(icon, null, tint = GoldS, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Text(subtitle, color = Color.White.copy(0.5f), fontSize = 13.sp)
@@ -316,13 +401,13 @@ fun SectionCard(title: String, subtitle: String, icon: ImageVector, onClick: () 
 }
 
 @Composable
-fun BrowsePagerScreen(initialPage: Int, onPlay: (MediaItem) -> Unit, onBack: () -> Unit, onPlans: () -> Unit) {
+fun BrowsePagerScreen(initialPage: Int, onPlay: (MediaItem) -> Unit, onBack: () -> Unit) {
     var page by remember { mutableStateOf(initialPage.coerceIn(0, 2)) }
     val titles = listOf("Radios", "Canales", "Películas")
     val items = when (page) {
-        0 -> PlaylistCatalog.radios
-        1 -> PlaylistCatalog.channels
-        else -> PlaylistCatalog.movies
+        0 -> try { PlaylistCatalog.radios.toList() } catch (_: Throwable) { emptyList() }
+        1 -> try { PlaylistCatalog.channels.toList() } catch (_: Throwable) { emptyList() }
+        else -> try { PlaylistCatalog.movies.toList() } catch (_: Throwable) { emptyList() }
     }
     Column(Modifier.fillMaxSize().background(NavyS)) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -348,8 +433,8 @@ fun BrowsePagerScreen(initialPage: Int, onPlay: (MediaItem) -> Unit, onBack: () 
 @Composable
 fun FavoritesScreen(onPlay: (MediaItem) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    val favIds = remember { FavoritesManager.getIds(context) }
-    val all = PlaylistCatalog.radios + PlaylistCatalog.channels + PlaylistCatalog.movies
+    val favIds = remember { try { FavoritesManager.getIds(context) } catch (_: Throwable) { emptySet() } }
+    val all = try { PlaylistCatalog.radios + PlaylistCatalog.channels + PlaylistCatalog.movies } catch (_: Throwable) { emptyList() }
     val favItems = all.filter { it.id in favIds }
     Column(Modifier.fillMaxSize().background(NavyS).padding(12.dp)) {
         TextButton(onClick = onBack) { Text("← Inicio", color = GoldS) }
@@ -362,7 +447,9 @@ fun FavoritesScreen(onPlay: (MediaItem) -> Unit, onBack: () -> Unit) {
 
 private suspend fun loadPlaylist(sourceUrl: String): List<MediaItem> = withContext(Dispatchers.IO) {
     val connection = (URL(sourceUrl).openConnection() as HttpURLConnection).apply {
-        connectTimeout = 15000; readTimeout = 20000; requestMethod = "GET"
+        connectTimeout = 15000
+        readTimeout = 20000
+        requestMethod = "GET"
         setRequestProperty("User-Agent", "KunturMediaPro/2.9")
     }
     try {
