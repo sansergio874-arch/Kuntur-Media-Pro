@@ -143,11 +143,7 @@ fun PlayerScreen(
 
     LaunchedEffect(isFullscreen) {
         try {
-            activity?.requestedOrientation = if (isFullscreen) {
-                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            } else {
-                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            }
+            activity?.requestedOrientation = if (isFullscreen) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         } catch (_: Throwable) {}
     }
 
@@ -157,9 +153,7 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(currentQuality) {
-        try { applyQuality(player, currentQuality) } catch (_: Throwable) {}
-    }
+    LaunchedEffect(currentQuality) { try { applyQuality(player, currentQuality) } catch (_: Throwable) {} }
 
     DisposableEffect(player) {
         isPlaying = player.isPlaying
@@ -191,7 +185,6 @@ fun PlayerScreen(
         "tv" -> "Reproductor de canales · segundo plano activo"
         else -> "Reproductor de películas"
     }
-
     val videoResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
 
     Column(Modifier.fillMaxSize().background(Color.Black)) {
@@ -232,21 +225,14 @@ fun PlayerScreen(
                         try { setShowSubtitleButton(false) } catch (_: Throwable) {}
                     }
                 },
-                update = { view ->
-                    view.player = player
-                    view.resizeMode = videoResizeMode
-                },
+                update = { view -> view.player = player; view.resizeMode = videoResizeMode },
                 modifier = Modifier.fillMaxSize().pointerInput(item.id) { detectTransformGestures { _, _, zoom, _ -> videoScale = (videoScale * zoom).coerceIn(1f, 3f) } }.graphicsLayer { scaleX = videoScale; scaleY = videoScale }
             )
-
             if (isFullscreen) {
                 Row(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
-                    IconButton(onClick = { isFullscreen = false }) {
-                        Icon(Icons.Default.FullscreenExit, null, tint = GoldUi)
-                    }
+                    IconButton(onClick = { isFullscreen = false }) { Icon(Icons.Default.FullscreenExit, null, tint = GoldUi) }
                 }
             }
-
             if (isBuffering && errorMsg == null) CircularProgressIndicator(color = GoldUi, strokeWidth = 3.dp)
             if (errorMsg != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(24.dp).background(Color.Black.copy(0.8f), RoundedCornerShape(12.dp)).padding(20.dp)) {
@@ -263,9 +249,7 @@ fun PlayerScreen(
                     Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = NavyUi)
                 }
                 OutlinedButton(onClick = onStop, colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldUi)) {
-                    Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Detener")
+                    Icon(Icons.Default.Stop, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Detener")
                 }
                 val status = when {
                     errorMsg != null -> "Error"
@@ -275,9 +259,7 @@ fun PlayerScreen(
                 }
                 Text(status, color = Color.White.copy(0.75f), fontSize = 13.sp, modifier = Modifier.weight(1f))
                 if (isVideo) {
-                    IconButton(onClick = { showQualityMenu = true }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Calidad", tint = GoldUi)
-                    }
+                    IconButton(onClick = { showQualityMenu = true }) { Icon(Icons.Default.Settings, contentDescription = "Calidad", tint = GoldUi) }
                     Text(currentQuality.label, color = GoldUi, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
@@ -302,7 +284,7 @@ fun PlayerScreen(
                             Spacer(Modifier.width(8.dp))
                             Column {
                                 Text(q.label, color = Color.White, fontWeight = FontWeight.Medium)
-                                Text(when (q) { VideoQuality.LOW -> "360p · menor consumo"; VideoQuality.MEDIUM -> "480p"; VideoQuality.HIGH -> "720p"; VideoQuality.ULTRA -> "1080p"; VideoQuality.MAX -> "Máxima disponible" }, color = Color.White.copy(0.6f), fontSize = 12.sp)
+                                Text(when (q) { VideoQuality.LOW -> "360p"; VideoQuality.MEDIUM -> "480p"; VideoQuality.HIGH -> "720p"; VideoQuality.ULTRA -> "1080p"; VideoQuality.MAX -> "Máxima" }, color = Color.White.copy(0.6f), fontSize = 12.sp)
                             }
                         }
                     }
@@ -323,7 +305,8 @@ fun PlansScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(TransactionManager.getHistory(context)) }
-    var showAdminDialog by remember { mutableStateOf(false) }
+    var isOwner by remember { mutableStateOf(PurchaseManager.isOwnerDevice(context)) }
+    var showUnlockDialog by remember { mutableStateOf(false) }
     var adminPin by remember { mutableStateOf("") }
     var selectedPlanForAdmin by remember { mutableStateOf(PurchaseManager.getCurrentPlan(context)) }
     val current = PurchaseManager.getCurrentPlan(context)
@@ -334,11 +317,12 @@ fun PlansScreen(onBack: () -> Unit) {
         statusLabel = PurchaseManager.getStatusLabel(context)
         txCode = PurchaseManager.getTransactionCode(context)
         history = TransactionManager.getHistory(context)
+        isOwner = PurchaseManager.isOwnerDevice(context)
     }
 
     fun refreshFromServer() {
         if (!backendOk) {
-            message = "Cuando el administrador confirme su pago, el plan se activará."
+            message = "Cuando se confirme su pago, el plan se activará."
             return
         }
         scope.launch {
@@ -387,51 +371,51 @@ fun PlansScreen(onBack: () -> Unit) {
         }
     }
 
-    fun activateWithPin() {
+    fun tryUnlockOwner() {
+        if (PurchaseManager.unlockOwnerMode(context, adminPin)) {
+            adminPin = ""
+            showUnlockDialog = false
+            refreshStatus()
+            message = "Dispositivo de propietario activado."
+        } else {
+            message = "Código incorrecto."
+            adminPin = ""
+        }
+    }
+
+    fun activatePlanAsOwner() {
         val planId = when {
             selectedPlanForAdmin.isNotBlank() && selectedPlanForAdmin != "free" -> selectedPlanForAdmin
             current != "free" -> current
             else -> null
         }
         if (planId == null) {
-            message = "Primero debe haber un plan solicitado."
-            showAdminDialog = false
+            message = "Primero solicite un plan en este dispositivo."
             return
         }
-        val ok = PurchaseManager.activateWithAdminPin(context, adminPin, planId, txCode.ifBlank { null })
+        val ok = PurchaseManager.activateWithAdminPin(context, BillingConfig.ADMIN_PIN, planId, txCode.ifBlank { null })
         if (ok) {
             TransactionManager.updateStatus(context, txCode.ifBlank { "ADMIN" }, "approved")
-            adminPin = ""
-            showAdminDialog = false
             refreshStatus()
             message = "Plan ${PurchaseManager.planDisplayName(planId)} activado."
         } else {
-            message = "No se pudo activar."
+            message = "No se pudo activar el plan."
         }
     }
 
-    if (showAdminDialog) {
+    if (showUnlockDialog) {
         AlertDialog(
-            onDismissRequest = { showAdminDialog = false; adminPin = "" },
-            title = { Text("Activación") },
+            onDismissRequest = { showUnlockDialog = false; adminPin = "" },
+            title = { Text("Acceso") },
             text = {
                 Column {
                     Text("Introduzca el código de autorización.", fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = adminPin,
-                        onValueChange = { adminPin = it },
-                        label = { Text("Código") },
-                        singleLine = true
-                    )
+                    OutlinedTextField(value = adminPin, onValueChange = { adminPin = it }, label = { Text("Código") }, singleLine = true)
                 }
             },
-            confirmButton = {
-                Button(onClick = { activateWithPin() }) { Text("Confirmar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAdminDialog = false; adminPin = "" }) { Text("Cerrar") }
-            }
+            confirmButton = { Button(onClick = { tryUnlockOwner() }) { Text("Confirmar") } },
+            dismissButton = { TextButton(onClick = { showUnlockDialog = false; adminPin = "" }) { Text("Cerrar") } }
         )
     }
 
@@ -443,40 +427,26 @@ fun PlansScreen(onBack: () -> Unit) {
                 color = Color.White,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.combinedClickable(
-                    onClick = {},
-                    onLongClick = { showAdminDialog = true }
-                )
+                modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { if (!isOwner) showUnlockDialog = true })
             )
             Text("Yape: ${BillingConfig.YAPE_NUMBER}", color = GoldUi, fontWeight = FontWeight.SemiBold)
             Text(statusLabel, color = Color.White.copy(0.75f), fontSize = 14.sp)
             if (txCode.isNotBlank()) {
                 Text("Código: $txCode", color = GoldUi, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(top = 6.dp))
             }
-            Text(
-                "Solicite un plan, realice el pago por Yape indicando el código y espere la activación.",
-                color = Color.White.copy(0.55f),
-                fontSize = 13.sp,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            Text("Solicite un plan, realice el pago por Yape indicando el código y espere la activación.", color = Color.White.copy(0.55f), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
             Spacer(Modifier.height(12.dp))
             if (backendOk) {
                 Button(onClick = { refreshFromServer() }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = GoldUi), modifier = Modifier.fillMaxWidth()) {
                     Text(if (loading) "Consultando…" else "Verificar activación", color = NavyUi, fontWeight = FontWeight.Bold)
                 }
             }
-            if (message != null) {
-                Text(message!!, color = Color(0xFF81C784), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
-            }
+            if (message != null) Text(message!!, color = Color(0xFF81C784), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
             Spacer(Modifier.height(16.dp))
         }
         items(PurchaseManager.plans, key = { it.id }) { plan ->
             val selected = current == plan.id
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBgUi),
-                shape = RoundedCornerShape(14.dp)
-            ) {
+            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBgUi), shape = RoundedCornerShape(14.dp)) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(plan.name, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -484,40 +454,34 @@ fun PlansScreen(onBack: () -> Unit) {
                     }
                     Text(plan.description, color = Color.White.copy(0.6f), fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
-                    Button(
-                        onClick = {
-                            selectedPlanForAdmin = plan.id
-                            requestPlan(plan.id, plan.name, plan.price)
-                        },
-                        enabled = !loading,
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldUi),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text(
-                            when {
-                                selected && approved -> "Activo"
-                                selected && !approved -> "Pendiente"
-                                else -> "Solicitar plan"
-                            },
-                            color = NavyUi
-                        )
+                    Button(onClick = { selectedPlanForAdmin = plan.id; requestPlan(plan.id, plan.name, plan.price) }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = GoldUi), shape = RoundedCornerShape(10.dp)) {
+                        Text(when { selected && approved -> "Activo"; selected && !approved -> "Pendiente"; else -> "Solicitar plan" }, color = NavyUi)
                     }
                 }
             }
         }
-        if (history.isNotEmpty()) {
+        if (isOwner) {
             item {
                 Spacer(Modifier.height(20.dp))
-                Text("Historial", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("Administración (solo usted)", color = GoldUi, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text("Active el plan pendiente en este dispositivo tras recibir el Yape.", color = Color.White.copy(0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
+                Button(onClick = { activatePlanAsOwner() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
+                    Text("Activar plan pendiente", color = Color.White, fontWeight = FontWeight.Bold)
+                }
                 Spacer(Modifier.height(8.dp))
+                TextButton(onClick = {
+                    PurchaseManager.lockOwnerMode(context)
+                    refreshStatus()
+                    message = "Modo propietario desactivado en este dispositivo."
+                }) {
+                    Text("Salir del modo propietario", color = Color.White.copy(0.5f), fontSize = 12.sp)
+                }
             }
+        }
+        if (history.isNotEmpty()) {
+            item { Spacer(Modifier.height(20.dp)); Text("Historial", color = Color.White, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(8.dp)) }
             items(history.take(10), key = { it.id }) { tx ->
-                Text(
-                    "${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status}",
-                    color = Color.White.copy(0.55f),
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                Text("${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status}", color = Color.White.copy(0.55f), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
