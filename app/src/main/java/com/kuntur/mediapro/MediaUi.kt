@@ -2,8 +2,10 @@ package com.kuntur.mediapro
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -311,6 +313,7 @@ fun PlayerScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun PlansScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -320,6 +323,7 @@ fun PlansScreen(onBack: () -> Unit) {
     var message by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(TransactionManager.getHistory(context)) }
+    var showAdminDialog by remember { mutableStateOf(false) }
     var adminPin by remember { mutableStateOf("") }
     var selectedPlanForAdmin by remember { mutableStateOf(PurchaseManager.getCurrentPlan(context)) }
     val current = PurchaseManager.getCurrentPlan(context)
@@ -334,7 +338,7 @@ fun PlansScreen(onBack: () -> Unit) {
 
     fun refreshFromServer() {
         if (!backendOk) {
-            message = "Sin backend. Use el PIN de administrador para activar tras el Yape."
+            message = "Cuando el administrador confirme su pago, el plan se activará."
             return
         }
         scope.launch {
@@ -347,9 +351,9 @@ fun PlansScreen(onBack: () -> Unit) {
                     PurchaseManager.applyRemoteApproved(context, sub.planId, sub.transactionCode)
                     TransactionManager.updateStatus(context, sub.transactionCode, "approved")
                     refreshStatus()
-                    message = "Plan activado desde servidor: ${sub.planName}"
+                    message = "Plan activado: ${sub.planName}"
                 } else {
-                    message = "No hay activación aprobada aún. Use el PIN admin tras el pago."
+                    message = "Aún no hay activación. Espere la confirmación del pago."
                 }
             }.onFailure { message = it.message ?: "Error de red" }
             loading = false
@@ -360,7 +364,6 @@ fun PlansScreen(onBack: () -> Unit) {
         scope.launch {
             loading = true
             message = null
-            val deviceId = DeviceId.get(context)
             if (!backendOk) {
                 val localCode = "KNT-${planId.take(3).uppercase()}-${(1000..9999).random()}"
                 PurchaseManager.requestPlan(context, planId, localCode)
@@ -371,6 +374,7 @@ fun PlansScreen(onBack: () -> Unit) {
                 loading = false
                 return@launch
             }
+            val deviceId = DeviceId.get(context)
             val result = withContext(Dispatchers.IO) { SubscriptionApi.createPending(deviceId, planId, planName, price) }
             result.onSuccess { sub ->
                 PurchaseManager.requestPlan(context, planId, sub.transactionCode)
@@ -390,42 +394,89 @@ fun PlansScreen(onBack: () -> Unit) {
             else -> null
         }
         if (planId == null) {
-            message = "Primero solicite un plan."
+            message = "Primero debe haber un plan solicitado."
+            showAdminDialog = false
             return
         }
         val ok = PurchaseManager.activateWithAdminPin(context, adminPin, planId, txCode.ifBlank { null })
         if (ok) {
             TransactionManager.updateStatus(context, txCode.ifBlank { "ADMIN" }, "approved")
             adminPin = ""
+            showAdminDialog = false
             refreshStatus()
-            message = "Plan ${PurchaseManager.planDisplayName(planId)} activado correctamente."
+            message = "Plan ${PurchaseManager.planDisplayName(planId)} activado."
         } else {
-            message = "PIN incorrecto o plan no válido."
+            message = "No se pudo activar."
         }
+    }
+
+    if (showAdminDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdminDialog = false; adminPin = "" },
+            title = { Text("Activación") },
+            text = {
+                Column {
+                    Text("Introduzca el código de autorización.", fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = adminPin,
+                        onValueChange = { adminPin = it },
+                        label = { Text("Código") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { activateWithPin() }) { Text("Confirmar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdminDialog = false; adminPin = "" }) { Text("Cerrar") }
+            }
+        )
     }
 
     LazyColumn(Modifier.fillMaxSize().background(NavyUi), contentPadding = PaddingValues(18.dp)) {
         item {
             TextButton(onClick = onBack) { Text("← Volver", color = GoldUi) }
-            Text("Planes", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Planes",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = { showAdminDialog = true }
+                )
+            )
             Text("Yape: ${BillingConfig.YAPE_NUMBER}", color = GoldUi, fontWeight = FontWeight.SemiBold)
             Text(statusLabel, color = Color.White.copy(0.75f), fontSize = 14.sp)
             if (txCode.isNotBlank()) {
                 Text("Código: $txCode", color = GoldUi, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.padding(top = 6.dp))
             }
-            Text("1) Solicite plan  2) Pague por Yape  3) Admin activa con PIN.", color = Color.White.copy(0.55f), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                "Solicite un plan, realice el pago por Yape indicando el código y espere la activación.",
+                color = Color.White.copy(0.55f),
+                fontSize = 13.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
             Spacer(Modifier.height(12.dp))
             if (backendOk) {
                 Button(onClick = { refreshFromServer() }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = GoldUi), modifier = Modifier.fillMaxWidth()) {
-                    Text(if (loading) "Consultando…" else "Verificar en servidor", color = NavyUi, fontWeight = FontWeight.Bold)
+                    Text(if (loading) "Consultando…" else "Verificar activación", color = NavyUi, fontWeight = FontWeight.Bold)
                 }
             }
-            if (message != null) Text(message!!, color = Color(0xFF81C784), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            if (message != null) {
+                Text(message!!, color = Color(0xFF81C784), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            }
             Spacer(Modifier.height(16.dp))
         }
         items(PurchaseManager.plans, key = { it.id }) { plan ->
             val selected = current == plan.id
-            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBgUi), shape = RoundedCornerShape(14.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF243B55) else CardBgUi),
+                shape = RoundedCornerShape(14.dp)
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(plan.name, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -433,41 +484,40 @@ fun PlansScreen(onBack: () -> Unit) {
                     }
                     Text(plan.description, color = Color.White.copy(0.6f), fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
-                    Button(onClick = { selectedPlanForAdmin = plan.id; requestPlan(plan.id, plan.name, plan.price) }, enabled = !loading, colors = ButtonDefaults.buttonColors(containerColor = GoldUi), shape = RoundedCornerShape(10.dp)) {
-                        Text(when { selected && approved -> "Activo"; selected && !approved -> "Pendiente"; else -> "Solicitar plan" }, color = NavyUi)
+                    Button(
+                        onClick = {
+                            selectedPlanForAdmin = plan.id
+                            requestPlan(plan.id, plan.name, plan.price)
+                        },
+                        enabled = !loading,
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldUi),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text(
+                            when {
+                                selected && approved -> "Activo"
+                                selected && !approved -> "Pendiente"
+                                else -> "Solicitar plan"
+                            },
+                            color = NavyUi
+                        )
                     }
                 }
             }
         }
-        item {
-            Spacer(Modifier.height(20.dp))
-            Text("Activación del administrador", color = GoldUi, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Text("Solo el propietario: tras recibir el Yape, introduzca el PIN en el dispositivo del cliente.", color = Color.White.copy(0.55f), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp))
-            OutlinedTextField(
-                value = adminPin,
-                onValueChange = { adminPin = it },
-                label = { Text("PIN de administrador") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = GoldUi,
-                    unfocusedBorderColor = Color.White.copy(0.3f),
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedLabelColor = GoldUi,
-                    unfocusedLabelColor = Color.White.copy(0.5f),
-                    cursorColor = GoldUi
-                )
-            )
-            Spacer(Modifier.height(10.dp))
-            Button(onClick = { activateWithPin() }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)), modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)) {
-                Text("Activar plan con PIN", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
         if (history.isNotEmpty()) {
-            item { Spacer(Modifier.height(20.dp)); Text("Historial", color = Color.White, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(8.dp)) }
+            item {
+                Spacer(Modifier.height(20.dp))
+                Text("Historial", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+            }
             items(history.take(10), key = { it.id }) { tx ->
-                Text("${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status} · ${tx.id}", color = Color.White.copy(0.55f), fontSize = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
+                Text(
+                    "${tx.createdAt} · ${tx.planName} · S/ ${tx.price} · ${tx.status}",
+                    color = Color.White.copy(0.55f),
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
             }
         }
         item { Spacer(Modifier.height(28.dp)) }
