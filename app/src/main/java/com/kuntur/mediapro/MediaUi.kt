@@ -190,8 +190,8 @@ fun PlayerScreen(
         else -> "Reproductor de películas"
     }
 
-    // ZOOM llena la pantalla sin franjas negras (puede recortar bordes mínimos)
-    val videoResizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    // FILL (FIT_XY): llena toda la pantalla sin franjas ni recorte (puede estirar)
+    val videoResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
 
     Column(Modifier.fillMaxSize().background(Color.Black)) {
         if (!isFullscreen) {
@@ -287,7 +287,7 @@ fun PlayerScreen(
                 Text("Puede minimizar la aplicación: la radio seguirá sonando.", color = Color.White.copy(0.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                 Spacer(Modifier.weight(1f))
             } else {
-                Text("Pantalla completa: sin franjas negras. Gira a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                Text("Pantalla completa FIT_XY: sin franjas. Gira a horizontal.", color = Color.White.copy(0.45f), fontSize = 11.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
             }
         }
     }
