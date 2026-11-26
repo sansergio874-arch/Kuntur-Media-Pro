@@ -6,14 +6,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -73,7 +70,7 @@ fun AppRoot(player: ExoPlayer) {
     var currentItem by remember { mutableStateOf<MediaItem?>(null) }
     var accessDeniedMessage by remember { mutableStateOf<String?>(null) }
     var playErrorMessage by remember { mutableStateOf<String?>(null) }
-    var browseInitialPage by remember { mutableIntStateOf(0) }
+    var browseInitialPage by remember { mutableStateOf(0) }
     var showPlaylistDialog by remember { mutableStateOf(false) }
     var playlistUrl by remember { mutableStateOf("") }
     var playlistMessage by remember { mutableStateOf<String?>(null) }
@@ -320,22 +317,30 @@ fun SectionCard(title: String, subtitle: String, icon: ImageVector, onClick: () 
 
 @Composable
 fun BrowsePagerScreen(initialPage: Int, onPlay: (MediaItem) -> Unit, onBack: () -> Unit, onPlans: () -> Unit) {
-    val pagerState = rememberPagerState(initialPage = initialPage.coerceIn(0, 2), pageCount = { 3 })
+    var page by remember { mutableStateOf(initialPage.coerceIn(0, 2)) }
     val titles = listOf("Radios", "Canales", "Películas")
+    val items = when (page) {
+        0 -> PlaylistCatalog.radios
+        1 -> PlaylistCatalog.channels
+        else -> PlaylistCatalog.movies
+    }
     Column(Modifier.fillMaxSize().background(NavyS)) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("← Inicio", color = GoldS) }
-            Text(titles.getOrElse(pagerState.currentPage) { "Catálogo" }, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            Text(titles[page], color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
         }
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
-            val items = when (page) {
-                0 -> PlaylistCatalog.radios
-                1 -> PlaylistCatalog.channels
-                else -> PlaylistCatalog.movies
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            titles.forEachIndexed { i, title ->
+                FilterChip(
+                    selected = page == i,
+                    onClick = { page = i },
+                    label = { Text(title) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = GoldS, selectedLabelColor = NavyS)
+                )
             }
-            LazyColumn(contentPadding = PaddingValues(12.dp)) {
-                items(items, key = { it.id }) { item -> MediaRow(item = item, onPlay = onPlay) }
-            }
+        }
+        LazyColumn(contentPadding = PaddingValues(12.dp), modifier = Modifier.fillMaxSize()) {
+            items(items, key = { it.id }) { item -> MediaRow(item = item, onPlay = onPlay) }
         }
     }
 }
